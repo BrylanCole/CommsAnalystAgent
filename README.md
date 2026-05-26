@@ -46,6 +46,20 @@ The agent will:
 Track sentiment around GitHub Copilot over the last 72 hours, competitors: OpenAI, GitLab
 ```
 
+### Step 4b — Run in web dashboard mode (minimal UI)
+
+```bash
+comms-analyst-web
+```
+
+Open:
+
+```text
+http://127.0.0.1:8080
+```
+
+Use the prompt box to ask in plain English, then view generated reports from the dashboard list.
+
 ### Step 5 — Find your report
 
 ```text
@@ -103,6 +117,17 @@ Pass a prompt directly (for scripting or CI):
 ```bash
 comms-analyst-chat --prompt "Track sentiment around OpenAI Sora last 48 hours" --yes
 ```
+
+## Web dashboard mode (prompt + report browser)
+
+Start the local web app:
+
+```bash
+comms-analyst-web --host 127.0.0.1 --port 8080 --output-dir outputs
+```
+
+Then open `http://127.0.0.1:8080`, enter your prompt, and run a report.
+The dashboard lists recent reports with quick links to `report.md` and `report.json`.
 
 ### Prompt examples
 
@@ -180,4 +205,3 @@ Run tests with:
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
-
