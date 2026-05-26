@@ -1,0 +1,47 @@
+name: Run Communications Analyst Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: "Path to config JSON"
+        required: false
+        default: "config/monitoring_target.sample.json"
+      output_dir:
+        description: "Output directory"
+        required: false
+        default: "outputs"
+  schedule:
+    - cron: "0 */12 * * *"
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run communications analyst agent
+        run: |
+          comms-analyst-agent \
+            --config "${{ github.event.inputs.config_path || 'config/monitoring_target.sample.json' }}" \
+            --output-dir "${{ github.event.inputs.output_dir || 'outputs' }}"
+
+      - name: Upload generated report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: comms-analyst-report-${{ github.run_id }}
+          path: outputs/
+          if-no-files-found: warn

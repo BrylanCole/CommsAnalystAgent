@@ -1,0 +1,14 @@
+{
+  "target_name": "GitHub Copilot Launch Monitoring",
+  "launch_name": "GitHub Copilot",
+  "github_terms": ["GitHub", "Copilot", "GitHub AI"],
+  "executive_names": ["Thomas Dohmke"],
+  "hashtags": ["#GitHub", "#GitHubCopilot"],
+  "competitors": ["OpenAI", "GitLab", "Cursor"],
+  "time_window_hours": 72,
+  "rss_feeds": [
+    "https://github.blog/feed/",
+    "https://hnrss.org/frontpage"
+  ],
+  "max_items_per_source": 20
+}
