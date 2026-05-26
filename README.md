@@ -1,14 +1,15 @@
-# Custom agents template
+# Communications Analyst Agent
 
-This template repository makes it easy for enterprise and organization owners to get started with Copilot custom agents by providing:
-* The basic file structure necessary for custom agents
-* An example agent profile in the `agents` directory
+This repository defines a GitHub Copilot custom agent focused on communications intelligence for GitHub launches and announcements.
 
-> [!NOTE]
-> The example agent profile is commented out, so you can use this template repository without unintentionally making a custom agent available to your team.
+## Included agent
+
+- `agents/comms-intelligence-analyst.md` — senior comms/media intelligence analyst profile for monitoring launch sentiment, narrative shifts, media framing, and influencer/publication impact.
 
 ## Getting started
 
-1. Using this template repository, create a private repository called `.github-private` in your organization.
-1. Edit this README to best meet your needs. Consider including creation guidelines for custom agents or compliance considerations specific to your team.
-1. Edit the provided `agents/example-agent.md` file to create your first custom agent. For more information, see [Creating custom agents](https://docs.github.com/copilot/how-tos/use-copilot-agents/coding-agent/create-custom-agents).
+1. Use this repository as your `.github-private` repo (or copy the `agents` file into your existing one).
+2. Confirm custom agents are enabled for your organization/enterprise.
+3. Start a Copilot chat and invoke the communications analyst agent for launch tracking, sentiment analysis, and executive-ready reporting.
+
+For setup details, see [Creating custom agents](https://docs.github.com/copilot/how-tos/use-copilot-agents/coding-agent/create-custom-agents).
