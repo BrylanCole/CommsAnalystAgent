@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import dataclasses
 import html
+import hmac
 import json
 import os
 import tempfile
@@ -27,6 +30,20 @@ def _is_within(path: Path, parent: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _is_authorized(auth_header: str | None, username: str, password: str) -> bool:
+    if not auth_header or not auth_header.startswith("Basic "):
+        return False
+    token = auth_header.split(" ", 1)[1].strip()
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+    if ":" not in decoded:
+        return False
+    given_user, given_password = decoded.split(":", 1)
+    return hmac.compare_digest(given_user, username) and hmac.compare_digest(given_password, password)
 
 
 def _render_dashboard(output_root: Path, message: str = "", error: str = "") -> str:
@@ -104,6 +121,8 @@ def _render_dashboard(output_root: Path, message: str = "", error: str = "") -> 
 
 class DashboardHandler(BaseHTTPRequestHandler):
     output_root = Path("outputs")
+    auth_username: str | None = None
+    auth_password: str | None = None
 
     def _read_form(self) -> dict[str, str]:
         length = int(self.headers.get("Content-Length", "0"))
@@ -115,12 +134,40 @@ class DashboardHandler(BaseHTTPRequestHandler):
         body = page.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
+    def _auth_required(self) -> bool:
+        return bool(self.auth_username and self.auth_password)
+
+    def _enforce_auth(self) -> bool:
+        if not self._auth_required():
+            return True
+        header = self.headers.get("Authorization")
+        if _is_authorized(header, self.auth_username or "", self.auth_password or ""):
+            return True
+        self.send_response(HTTPStatus.UNAUTHORIZED)
+        self.send_header("WWW-Authenticate", 'Basic realm="Comms Analyst Dashboard"')
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return False
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            body = b"ok"
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if not self._enforce_auth():
+            return
+
         if parsed.path == "/":
             params = parse_qs(parsed.query)
             page = _render_dashboard(
@@ -160,6 +207,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if not self._enforce_auth():
+            return
         if parsed.path != "/run":
             self._respond_html("<h3>Not found.</h3>", status=HTTPStatus.NOT_FOUND)
             return
@@ -194,15 +243,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the minimal Comms Analyst web dashboard.")
-    parser.add_argument("--host", default="127.0.0.1", help="Host bind address (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8080, help="Port (default: 8080)")
-    parser.add_argument("--output-dir", default="outputs", help="Output directory (default: outputs)")
+    parser.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"), help="Host bind address (default: HOST env or 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8080")), help="Port (default: PORT env or 8080)")
+    parser.add_argument("--output-dir", default=os.getenv("OUTPUT_DIR", "outputs"), help="Output directory (default: OUTPUT_DIR env or outputs)")
+    parser.add_argument("--require-auth", action="store_true", help="Require HTTP Basic Auth using COMMS_DASHBOARD_USERNAME and COMMS_DASHBOARD_PASSWORD.")
     args = parser.parse_args()
 
+    auth_username = os.getenv("COMMS_DASHBOARD_USERNAME")
+    auth_password = os.getenv("COMMS_DASHBOARD_PASSWORD")
+    if args.require_auth and not (auth_username and auth_password):
+        raise SystemExit("Missing COMMS_DASHBOARD_USERNAME/COMMS_DASHBOARD_PASSWORD for --require-auth.")
+
     DashboardHandler.output_root = Path(args.output_dir)
+    DashboardHandler.auth_username = auth_username
+    DashboardHandler.auth_password = auth_password
     DashboardHandler.output_root.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     print(f"Dashboard running at http://{args.host}:{args.port}")
+    if DashboardHandler.auth_username and DashboardHandler.auth_password:
+        print("Authentication: enabled (HTTP Basic Auth)")
+    else:
+        print("Authentication: disabled")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

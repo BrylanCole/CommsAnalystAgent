@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: comms-analyst-dashboard
+    env: docker
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: COMMS_DASHBOARD_USERNAME
+        sync: false
+      - key: COMMS_DASHBOARD_PASSWORD
+        sync: false
+      - key: OUTPUT_DIR
+        value: /app/outputs
