@@ -1,0 +1,8 @@
+{
+  "_comment": "Executive announcement template",
+  "_example_prompt": "Monitor coverage and sentiment for Sam Altman executive announcement over the last 48 hours",
+  "template_name": "Executive Announcement",
+  "suggested_time_window_hours": 48,
+  "typical_terms": ["CEO", "CTO", "executive", "statement", "announcement"],
+  "notes": "Include the executive's full name in your prompt for best results."
+}

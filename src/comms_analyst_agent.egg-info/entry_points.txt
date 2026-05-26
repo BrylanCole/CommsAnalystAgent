@@ -1,2 +1,3 @@
 [console_scripts]
 comms-analyst-agent = comms_analyst_agent.cli:main
+comms-analyst-chat = comms_analyst_agent.chat:main

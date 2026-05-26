@@ -3,8 +3,12 @@ name: Run Communications Analyst Agent
 on:
   workflow_dispatch:
     inputs:
+      prompt:
+        description: "Plain-English monitoring request (e.g. 'Track sentiment around GitHub Copilot last 72 hours'). When supplied, chat mode is used and config_path is ignored."
+        required: false
+        default: ""
       config_path:
-        description: "Path to config JSON"
+        description: "Path to config JSON (used only when prompt is empty)"
         required: false
         default: "config/monitoring_target.sample.json"
       output_dir:
@@ -33,7 +37,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .
 
-      - name: Run communications analyst agent
+      - name: Run via chat prompt (if prompt supplied)
+        if: ${{ github.event.inputs.prompt != '' }}
+        run: |
+          comms-analyst-chat \
+            --prompt "${{ github.event.inputs.prompt }}" \
+            --output-dir "${{ github.event.inputs.output_dir || 'outputs' }}" \
+            --yes
+
+      - name: Run via config file (if no prompt supplied)
+        if: ${{ github.event.inputs.prompt == '' }}
         run: |
           comms-analyst-agent \
             --config "${{ github.event.inputs.config_path || 'config/monitoring_target.sample.json' }}" \

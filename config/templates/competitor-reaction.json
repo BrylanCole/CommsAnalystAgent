@@ -1,0 +1,8 @@
+{
+  "_comment": "Competitor reaction template",
+  "_example_prompt": "Analyse public reaction comparing GitHub Copilot vs OpenAI, GitLab, Cursor over the last 72 hours",
+  "template_name": "Competitor Reaction",
+  "suggested_time_window_hours": 72,
+  "typical_terms": ["vs", "versus", "compared to", "alternative", "switch", "migration"],
+  "notes": "List competitors explicitly in the prompt for accurate comparison tracking."
+}
