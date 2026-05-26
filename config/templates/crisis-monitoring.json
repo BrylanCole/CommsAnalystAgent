@@ -1,0 +1,8 @@
+{
+  "_comment": "Crisis monitoring template",
+  "_example_prompt": "Track crisis, backlash, and negative sentiment around GitHub outage over the last 24 hours",
+  "template_name": "Crisis Monitoring",
+  "suggested_time_window_hours": 24,
+  "typical_terms": ["outage", "incident", "security", "breach", "vulnerability", "backlash"],
+  "notes": "Use a short time window (24h) during active crises; widen to 72h for retrospective analysis."
+}

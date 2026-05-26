@@ -3,11 +3,13 @@ README.md
 pyproject.toml
 src/comms_analyst_agent/__init__.py
 src/comms_analyst_agent/analysis.py
+src/comms_analyst_agent/chat.py
 src/comms_analyst_agent/cli.py
 src/comms_analyst_agent/collectors.py
 src/comms_analyst_agent/config.py
 src/comms_analyst_agent/models.py
 src/comms_analyst_agent/pipeline.py
+src/comms_analyst_agent/prompt_parser.py
 src/comms_analyst_agent/reporting.py
 src/comms_analyst_agent.egg-info/PKG-INFO
 src/comms_analyst_agent.egg-info/SOURCES.txt
@@ -15,4 +17,5 @@ src/comms_analyst_agent.egg-info/dependency_links.txt
 src/comms_analyst_agent.egg-info/entry_points.txt
 src/comms_analyst_agent.egg-info/top_level.txt
 tests/test_analysis.py
+tests/test_prompt_parser.py
 tests/test_reporting.py

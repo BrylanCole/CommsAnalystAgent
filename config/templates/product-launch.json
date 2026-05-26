@@ -1,0 +1,10 @@
+{
+  "_comment": "Product launch template — copy this file, fill in the topic fields, then run: comms-analyst-chat --prompt \"$(cat your-prompt.txt)\"",
+  "_usage": "Or simply run: comms-analyst-chat  and choose template [1] from the menu.",
+  "_example_prompt": "Track sentiment around GitHub Copilot product launch over the last 72 hours, competitors: OpenAI, GitLab, Cursor",
+  "template_name": "Product Launch",
+  "suggested_time_window_hours": 72,
+  "typical_terms": ["launch", "announcement", "release", "new feature", "GA", "generally available"],
+  "typical_hashtag_pattern": "#<ProductName> #<CompanyName>",
+  "notes": "Best used 0–72 hours after a public launch or announcement."
+}
