@@ -15,7 +15,7 @@ body:
     attributes:
       label: Monitoring prompt
       description: Describe what the agent should monitor.
-      placeholder: Track sentiment around GitHub Copilot over the last 72 hours, competitors: OpenAI, GitLab
+      placeholder: "Track sentiment around GitHub Copilot over the last 72 hours, competitors: OpenAI, GitLab"
     validations:
       required: true
 
