@@ -1,0 +1,53 @@
+name: Test Slack Notification
+
+on:
+  workflow_dispatch:
+    inputs:
+      slack_destination:
+        description: "Slack User ID (U...) or Channel ID (C...) to send the test message to"
+        required: true
+        default: "U0B5Y4MRKCP"
+
+jobs:
+  test-slack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test Slack message
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DESTINATION: ${{ inputs.slack_destination }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+          destination = os.environ.get("SLACK_DESTINATION", "").strip()
+          if not token:
+              raise SystemExit("Missing SLACK_BOT_TOKEN repository secret.")
+          if not destination:
+              raise SystemExit("Missing slack_destination input.")
+
+          text = (
+              "Comms Analyst Agent: test message.\n"
+              "Your Slack delivery is configured correctly.\n"
+              f"Triggered from: {os.environ['RUN_URL']}"
+          )
+          payload = {"channel": destination, "text": text}
+          req = urllib.request.Request(
+              "https://slack.com/api/chat.postMessage",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": "Bearer " + token,
+                  "Content-Type": "application/json; charset=utf-8",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              data = json.loads(resp.read().decode("utf-8"))
+          if not data.get("ok"):
+              raise SystemExit(f"Slack notification failed: {data}")
+          print(f"Test message sent successfully to {destination}.")
+          PY
