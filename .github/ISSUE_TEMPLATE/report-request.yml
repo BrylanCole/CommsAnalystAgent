@@ -8,8 +8,14 @@ body:
   - type: markdown
     attributes:
       value: |
+        > **Comms Analyst Agent Request Form**
+        > GitHub may still display the page header as **Create new issue**. This form is the correct submission flow for Comms Analyst Agent.
+
         ### Submit a new request to Comms Analyst Agent
-        Once your report is ready, open this issue's comments for the workflow run link, then download `report.md` and `report.json` from the linked run artifacts.
+        Once your report is ready:
+        1. Open this issue's comments.
+        2. Click the workflow run link posted by the bot.
+        3. Download `report.md` and `report.json` from the run artifacts.
 
         Submit a prompt and the agent will run in GitHub Actions.
         Add the `run-report` label later if you want to re-run this request.
