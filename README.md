@@ -211,7 +211,7 @@ Use GitHub itself as the team-facing prompt interface (no always-on Render cost)
 2. Workflow `.github/workflows/run-comms-analyst-from-issue.yml` triggers on issue creation (or when `run-report` label is added).
 3. Workflow extracts the plain-English prompt, runs:
    - `comms-analyst-chat --prompt "..."`
-4. Outputs are uploaded as artifacts, sent as plain-text summary to the requester on Slack, and a bot comment is posted back to the issue with run details.
+4. Outputs are uploaded as artifacts, sent as a structured Slack summary to the requester, and a bot comment is posted back to the issue with run details.
 
 Optional front-door URL via GitHub Pages:
 - `docs/index.md` links to:

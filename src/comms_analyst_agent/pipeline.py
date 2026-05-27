@@ -7,7 +7,7 @@ from pathlib import Path
 from .analysis import analyze_items
 from .collectors import collect_all
 from .config import load_config
-from .reporting import build_json_output, build_markdown_report, write_outputs
+from .reporting import build_json_output, build_markdown_report, build_slack_summary, write_outputs
 
 
 def build_target_slug(target_name: str) -> str:
@@ -23,9 +23,10 @@ def run_pipeline(config_path: str, output_root: str = "outputs") -> Path:
     analysis = analyze_items(items, config)
     markdown = build_markdown_report(config, analysis)
     json_payload = build_json_output(config, analysis)
+    slack_summary = build_slack_summary(config, analysis)
 
     run_id = dt.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     target_slug = build_target_slug(config.target_name)
     output_dir = Path(output_root) / target_slug / run_id
-    write_outputs(output_dir, markdown, json_payload)
+    write_outputs(output_dir, markdown, json_payload, slack_summary)
     return output_dir
