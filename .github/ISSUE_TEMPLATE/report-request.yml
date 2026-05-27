@@ -1,12 +1,16 @@
-name: Report Request
-description: Request a communications intelligence report using a plain-English prompt.
+name: Submit a new request to Comms Analyst Agent
+description: Submit a monitoring request in plain English and get results in this issue thread.
 title: "[Report Request] "
 labels:
   - report-request
+submit-button: Submit
 body:
   - type: markdown
     attributes:
       value: |
+        ### Submit a new request to Comms Analyst Agent
+        Once your report is ready, open this issue's comments for the workflow run link, then download `report.md` and `report.json` from the linked run artifacts.
+
         Submit a prompt and the agent will run in GitHub Actions.
         Add the `run-report` label later if you want to re-run this request.
 
