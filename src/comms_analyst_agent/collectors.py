@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,8 +15,9 @@ from .models import ContentItem
 USER_AGENT = "CommsAnalystAgent/0.1 (+https://github.com/BrylanCole/CommsAnalystAgent)"
 
 
-def _http_get_json(url: str) -> dict[str, Any]:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+def _http_get_json(url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    request_headers = {"User-Agent": USER_AGENT, **(headers or {})}
+    req = urllib.request.Request(url, headers=request_headers)
     with urllib.request.urlopen(req, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -31,6 +33,16 @@ def _safe_collect(fn: Any) -> list[ContentItem]:
         return fn()
     except (urllib.error.URLError, TimeoutError, ET.ParseError, json.JSONDecodeError, KeyError, ValueError):
         return []
+
+
+def _domain_allowed(url: str, allowlist: list[str]) -> bool:
+    if not allowlist:
+        return True
+    host = urllib.parse.urlparse(url).netloc.lower()
+    if not host:
+        return False
+    normalized = [domain.lower().lstrip(".") for domain in allowlist if domain.strip()]
+    return any(host == domain or host.endswith(f".{domain}") for domain in normalized)
 
 
 def collect_google_news(config: MonitoringConfig) -> list[ContentItem]:
@@ -49,6 +61,8 @@ def collect_google_news(config: MonitoringConfig) -> list[ContentItem]:
                 description = (node.findtext("description") or "").strip()
                 if not title or not link:
                     continue
+                if not _domain_allowed(link, config.article_domains):
+                    continue
                 items.append(
                     ContentItem(
                         title=title,
@@ -62,6 +76,101 @@ def collect_google_news(config: MonitoringConfig) -> list[ContentItem]:
                         engagement={},
                     )
                 )
+        return items
+
+    return _safe_collect(_collect)
+
+
+def collect_linkedin(config: MonitoringConfig) -> list[ContentItem]:
+    def _collect() -> list[ContentItem]:
+        access_token = os.getenv("COMMS_LINKEDIN_ACCESS_TOKEN", "").strip()
+        if not access_token:
+            return []
+
+        api_base = os.getenv("COMMS_LINKEDIN_API_BASE", "https://api.linkedin.com").rstrip("/")
+        headers = {"Authorization": "Bearer " + access_token}
+        page_size = min(config.max_items_per_source, 10)
+        items: list[ContentItem] = []
+
+        for term in config.search_terms:
+            start = 0
+            term_count = 0
+            while start < config.max_items_per_source:
+                query = urllib.parse.quote_plus(term)
+                url = (
+                    f"{api_base}/v2/posts"
+                    f"?q=search&keywords={query}&count={page_size}&start={start}"
+                )
+                try:
+                    data = _http_get_json(url, headers=headers)
+                except urllib.error.HTTPError as exc:
+                    if exc.code == 429:
+                        break
+                    raise
+
+                records = data.get("elements") or data.get("data") or []
+                if not records:
+                    break
+
+                for record in records:
+                    text = (
+                        record.get("commentary")
+                        or record.get("text")
+                        or record.get("message")
+                        or record.get("summary")
+                        or ""
+                    )
+                    title = (
+                        record.get("title")
+                        or text.splitlines()[0]
+                        or f"LinkedIn mention: {term}"
+                    )
+                    permalink = (
+                        record.get("permalink")
+                        or record.get("url")
+                        or record.get("activity")
+                        or ""
+                    )
+                    if not permalink:
+                        continue
+
+                    created = record.get("created") or {}
+                    engagement = record.get("engagement") or record.get("metrics") or {}
+                    author = record.get("authorName") or record.get("author") or None
+
+                    items.append(
+                        ContentItem(
+                            title=title.strip()[:180],
+                            url=str(permalink).strip(),
+                            source="LinkedIn",
+                            author=author,
+                            published_at=str(
+                                created.get("time")
+                                or record.get("publishedAt")
+                                or record.get("createdAt")
+                                or ""
+                            ).strip()
+                            or None,
+                            snippet=text.strip()[:600],
+                            content=text.strip()[:2000],
+                            channel="linkedin",
+                            engagement={
+                                "reactions": engagement.get("reactionCount"),
+                                "comments": engagement.get("commentaryCount"),
+                                "shares": engagement.get("shareCount"),
+                            },
+                        )
+                    )
+                    term_count += 1
+                    if term_count >= config.max_items_per_source:
+                        break
+
+                if term_count >= config.max_items_per_source:
+                    break
+                if len(records) < page_size:
+                    break
+                start += page_size
+
         return items
 
     return _safe_collect(_collect)
@@ -151,6 +260,8 @@ def collect_rss_feeds(config: MonitoringConfig) -> list[ContentItem]:
                 source = urllib.parse.urlparse(feed_url).netloc or "rss"
                 if not title or not link:
                     continue
+                if not _domain_allowed(link, config.article_domains):
+                    continue
                 description = (node.findtext("description") or "").strip()
                 items.append(
                     ContentItem(
@@ -183,10 +294,16 @@ def deduplicate_items(items: list[ContentItem]) -> list[ContentItem]:
 
 
 def collect_all(config: MonitoringConfig) -> list[ContentItem]:
-    collected = [
-        *collect_google_news(config),
-        *collect_reddit(config),
-        *collect_hacker_news(config),
-        *collect_rss_feeds(config),
-    ]
+    sources = config.enabled_sources
+    collected: list[ContentItem] = []
+    if "news" in sources:
+        collected.extend(collect_google_news(config))
+    if "reddit" in sources:
+        collected.extend(collect_reddit(config))
+    if "hackernews" in sources:
+        collected.extend(collect_hacker_news(config))
+    if "rss" in sources:
+        collected.extend(collect_rss_feeds(config))
+    if "linkedin" in sources:
+        collected.extend(collect_linkedin(config))
     return deduplicate_items(collected)

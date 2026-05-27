@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from .config import MonitoringConfig
+from .config import DEFAULT_SOURCES, MonitoringConfig
 
 # ---------------------------------------------------------------------------
 # Default feeds used when the user does not mention a specific source
@@ -83,9 +83,14 @@ def _extract_hashtags(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 _SOURCE_MAP: dict[str, list[str]] = {
     "reddit": ["reddit"],
+    "linkedin": ["linkedin"],
     "hacker news": ["hackernews"],
     "hn": ["hackernews"],
     "news": ["news"],
+    "article": ["news", "rss"],
+    "articles": ["news", "rss"],
+    "blog": ["rss"],
+    "blogs": ["rss"],
     "rss": ["rss"],
 }
 
@@ -219,6 +224,7 @@ def parse_prompt(prompt: str) -> MonitoringConfig:
     time_window = _extract_time_window(prompt)
     competitors = _extract_competitors(prompt)
     executives = _extract_executives(prompt)
+    source_focus = _extract_source_focus(prompt)
 
     # Max items: look for explicit "top N" style hint
     items_match = re.search(r"\b(top|max|limit)\s+(\d+)\b", prompt, re.IGNORECASE)
@@ -234,6 +240,7 @@ def parse_prompt(prompt: str) -> MonitoringConfig:
         time_window_hours=time_window,
         rss_feeds=DEFAULT_RSS_FEEDS,
         max_items_per_source=max_items,
+        sources=source_focus or list(DEFAULT_SOURCES),
     )
 
 
@@ -246,6 +253,7 @@ def describe_config(config: MonitoringConfig) -> str:
         f"  Competitors    : {', '.join(config.competitors) or '(none)'}",
         f"  Time window    : last {config.time_window_hours} hours",
         f"  Max items/src  : {config.max_items_per_source}",
+        f"  Sources        : {', '.join(sorted(config.enabled_sources))}",
         f"  RSS feeds      : {len(config.rss_feeds)} feed(s)",
     ]
     return "\n".join(lines)

@@ -84,6 +84,7 @@ outputs/<topic-name>/<timestamp>/report.json ← structured data
 ## What the agent does
 
 - Collects evidence from practical GitHub-hosted sources (Google News RSS search, RSS feeds, Reddit search, Hacker News)
+- Supports optional LinkedIn ingestion via official API access when credentials are configured
 - Normalizes collected items into a shared schema (`title`, `url`, `source`, `author`, `published_at`, `snippet/content`, `channel`, observed engagement)
 - Classifies sentiment into: Positive, Neutral, Negative, Mixed, Skeptical, Confused, Excited, Concerned
 - Estimates overall trend labels: Strongly positive, Moderately positive, Mixed, Polarized, Negative, Escalating concern
@@ -174,6 +175,8 @@ Create a JSON file (or copy `config/monitoring_target.sample.json`) with:
 - `time_window_hours`
 - `rss_feeds`
 - `max_items_per_source`
+- `sources` (optional list: `news`, `rss`, `reddit`, `hackernews`, `linkedin`)
+- `article_domains` (optional list of allowed article domains for News/RSS links)
 
 Run with a config file:
 
@@ -274,8 +277,13 @@ Current source adapters:
 - RSS feeds
 - Reddit search JSON endpoint
 - Hacker News (Algolia API)
+- LinkedIn API (`COMMS_LINKEDIN_ACCESS_TOKEN`)
 
-Some social networks (X, LinkedIn, Threads, TikTok) usually require official APIs, credentials, and policy-compliant access for reliable coverage. The collector module is adapter-based so those sources can be added later.
+LinkedIn collection is API-only (no scraping). Set:
+- `COMMS_LINKEDIN_ACCESS_TOKEN` (required for LinkedIn collection)
+- `COMMS_LINKEDIN_API_BASE` (optional, default: `https://api.linkedin.com`)
+
+Some social networks (X, Threads, TikTok) usually require official APIs, credentials, and policy-compliant access for reliable coverage. The collector module is adapter-based so those sources can be added later.
 
 ## Validation
 

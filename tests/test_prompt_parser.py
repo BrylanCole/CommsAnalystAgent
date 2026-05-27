@@ -5,6 +5,7 @@ from comms_analyst_agent.prompt_parser import (
     _extract_time_window,
     _extract_competitors,
     _extract_hashtags,
+    _extract_source_focus,
     parse_prompt,
     describe_config,
 )
@@ -53,6 +54,17 @@ class CompetitorExtractionTests(unittest.TestCase):
         self.assertEqual(_extract_competitors("track GitHub Copilot launch"), [])
 
 
+class SourceFocusExtractionTests(unittest.TestCase):
+    def test_extracts_single_source(self) -> None:
+        self.assertEqual(_extract_source_focus("monitor LinkedIn reactions"), ["linkedin"])
+
+    def test_extracts_article_aliases(self) -> None:
+        result = _extract_source_focus("track online articles and reddit")
+        self.assertIn("news", result)
+        self.assertIn("rss", result)
+        self.assertIn("reddit", result)
+
+
 class ParsePromptTests(unittest.TestCase):
     def test_basic_topic_parsed(self) -> None:
         cfg = parse_prompt("Monitor sentiment around GitHub Copilot over the last 72 hours")
@@ -83,6 +95,17 @@ class ParsePromptTests(unittest.TestCase):
         cfg = parse_prompt("Monitor GitHub Copilot top 10 items")
         self.assertEqual(cfg.max_items_per_source, 10)
 
+    def test_source_focus_applied(self) -> None:
+        cfg = parse_prompt("Monitor GitHub Copilot on LinkedIn and Reddit over the last 24 hours")
+        self.assertIn("linkedin", cfg.enabled_sources)
+        self.assertIn("reddit", cfg.enabled_sources)
+        self.assertNotIn("news", cfg.enabled_sources)
+
+    def test_default_sources_used_when_not_specified(self) -> None:
+        cfg = parse_prompt("Monitor GitHub Copilot")
+        self.assertIn("news", cfg.enabled_sources)
+        self.assertIn("rss", cfg.enabled_sources)
+
     def test_hashtags_extracted(self) -> None:
         cfg = parse_prompt("Track #GitHubCopilot over the last 48 hours")
         self.assertIn("#githubcopilot", cfg.hashtags)
@@ -108,6 +131,7 @@ class DescribeConfigTests(unittest.TestCase):
         desc = describe_config(cfg)
         self.assertIn("Time window", desc)
         self.assertIn("Search terms", desc)
+        self.assertIn("Sources", desc)
 
     def test_describe_returns_string(self) -> None:
         cfg = parse_prompt("Track Sora")
