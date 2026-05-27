@@ -204,7 +204,7 @@ Use GitHub itself as the team-facing prompt interface (no always-on Render cost)
 1. Team member opens **Report Request** issue using:
    - `.github/ISSUE_TEMPLATE/report-request.yml`
    - If the template chooser is not shown, open:
-     - `https://github.com/<owner>/<repo>/issues/new?template=report-request.yml`
+     - `https://github.com/BrylanCole/CommsAnalystAgent/issues/new?template=report-request.yml`
 2. Workflow `.github/workflows/run-comms-analyst-from-issue.yml` triggers on issue creation (or when `run-report` label is added).
 3. Workflow extracts the plain-English prompt, runs:
    - `comms-analyst-chat --prompt "..."`
