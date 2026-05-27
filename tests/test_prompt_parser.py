@@ -64,6 +64,10 @@ class SourceFocusExtractionTests(unittest.TestCase):
         self.assertIn("rss", result)
         self.assertIn("reddit", result)
 
+    def test_extracts_x_aliases(self) -> None:
+        result = _extract_source_focus("monitor updates on X and Twitter")
+        self.assertIn("x", result)
+
 
 class ParsePromptTests(unittest.TestCase):
     def test_basic_topic_parsed(self) -> None:
@@ -96,9 +100,10 @@ class ParsePromptTests(unittest.TestCase):
         self.assertEqual(cfg.max_items_per_source, 10)
 
     def test_source_focus_applied(self) -> None:
-        cfg = parse_prompt("Monitor GitHub Copilot on LinkedIn and Reddit over the last 24 hours")
+        cfg = parse_prompt("Monitor GitHub Copilot on LinkedIn, Reddit, and X over the last 24 hours")
         self.assertIn("linkedin", cfg.enabled_sources)
         self.assertIn("reddit", cfg.enabled_sources)
+        self.assertIn("x", cfg.enabled_sources)
         self.assertNotIn("news", cfg.enabled_sources)
 
     def test_default_sources_used_when_not_specified(self) -> None:

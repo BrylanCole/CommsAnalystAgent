@@ -94,12 +94,15 @@ class ReportingTests(unittest.TestCase):
         summary = build_slack_summary(config, analysis)
 
         self.assertIn("*Target — Deep Sentiment Analysis*", summary)
-        self.assertIn("*Executive Summary*", summary)
-        self.assertIn("*Channel Snapshot*", summary)
-        self.assertIn("LinkedIn", summary)
-        self.assertIn("*Key Amplifiers*", summary)
-        self.assertIn("*Top Risks & Recommended Focus*", summary)
-        self.assertIn("*Sources Analyzed*", summary)
+        self.assertIn("*Coverage Totals*", summary)
+        self.assertIn("Total # of articles:", summary)
+        self.assertIn("Total # of posts:", summary)
+        self.assertIn("*Top Headlines*", summary)
+        self.assertIn("Majority sentiment:", summary)
+        self.assertIn("*Key Themes / Messages*", summary)
+        self.assertIn("*Top News Mentioned*", summary)
+        self.assertIn("*Competitor Mentions / Comparisons*", summary)
+        self.assertIn("*Direct Social Post Links*", summary)
 
 
 if __name__ == "__main__":

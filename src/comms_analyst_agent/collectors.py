@@ -176,6 +176,77 @@ def collect_linkedin(config: MonitoringConfig) -> list[ContentItem]:
     return _safe_collect(_collect)
 
 
+def collect_x_posts(config: MonitoringConfig) -> list[ContentItem]:
+    def _collect() -> list[ContentItem]:
+        bearer_token = os.getenv("COMMS_X_BEARER_TOKEN", "").strip()
+        if not bearer_token:
+            return []
+
+        api_base = os.getenv("COMMS_X_API_BASE", "https://api.x.com").rstrip("/")
+        headers = {"Authorization": "Bearer " + bearer_token}
+        page_size = max(10, min(config.max_items_per_source, 100))
+        items: list[ContentItem] = []
+
+        for term in config.search_terms:
+            query = urllib.parse.quote_plus(f'"{term}" lang:en -is:retweet')
+            url = (
+                f"{api_base}/2/tweets/search/recent"
+                f"?query={query}&max_results={page_size}"
+                "&tweet.fields=created_at,author_id,public_metrics,text"
+                "&expansions=author_id"
+                "&user.fields=username,name"
+            )
+            try:
+                data = _http_get_json(url, headers=headers)
+            except urllib.error.HTTPError as exc:
+                if exc.code in {401, 403, 429}:
+                    break
+                raise
+
+            records = data.get("data") or []
+            users = {user.get("id"): user for user in data.get("includes", {}).get("users", [])}
+            term_count = 0
+            for record in records:
+                tweet_id = str(record.get("id") or "").strip()
+                if not tweet_id:
+                    continue
+                author_id = str(record.get("author_id") or "").strip()
+                user = users.get(author_id, {})
+                username = str(user.get("username") or "").strip()
+                permalink = (
+                    f"https://x.com/{username}/status/{tweet_id}"
+                    if username
+                    else f"https://x.com/i/web/status/{tweet_id}"
+                )
+                text = str(record.get("text") or "").strip()
+                metrics = record.get("public_metrics") or {}
+                items.append(
+                    ContentItem(
+                        title=(text.splitlines()[0] or f"X post mention: {term}")[:180],
+                        url=permalink,
+                        source="X",
+                        author=(f"@{username}" if username else None),
+                        published_at=str(record.get("created_at") or "").strip() or None,
+                        snippet=text[:600],
+                        content=text[:2000],
+                        channel="x",
+                        engagement={
+                            "likes": metrics.get("like_count"),
+                            "reposts": metrics.get("retweet_count"),
+                            "replies": metrics.get("reply_count"),
+                            "quotes": metrics.get("quote_count"),
+                        },
+                    )
+                )
+                term_count += 1
+                if term_count >= config.max_items_per_source:
+                    break
+
+        return items
+
+    return _safe_collect(_collect)
+
+
 def collect_reddit(config: MonitoringConfig) -> list[ContentItem]:
     def _collect() -> list[ContentItem]:
         items: list[ContentItem] = []
@@ -306,4 +377,6 @@ def collect_all(config: MonitoringConfig) -> list[ContentItem]:
         collected.extend(collect_rss_feeds(config))
     if "linkedin" in sources:
         collected.extend(collect_linkedin(config))
+    if "x" in sources:
+        collected.extend(collect_x_posts(config))
     return deduplicate_items(collected)

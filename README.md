@@ -175,7 +175,7 @@ Create a JSON file (or copy `config/monitoring_target.sample.json`) with:
 - `time_window_hours`
 - `rss_feeds`
 - `max_items_per_source`
-- `sources` (optional list: `news`, `rss`, `reddit`, `hackernews`, `linkedin`)
+- `sources` (optional list: `news`, `rss`, `reddit`, `hackernews`, `linkedin`, `x`)
 - `article_domains` (optional list of allowed article domains for News/RSS links)
 
 Run with a config file:
@@ -278,12 +278,17 @@ Current source adapters:
 - Reddit search JSON endpoint
 - Hacker News (Algolia API)
 - LinkedIn API (`COMMS_LINKEDIN_ACCESS_TOKEN`)
+- X API v2 recent search (`COMMS_X_BEARER_TOKEN`)
 
 LinkedIn collection is API-only (no scraping). Set:
 - `COMMS_LINKEDIN_ACCESS_TOKEN` (required for LinkedIn collection)
 - `COMMS_LINKEDIN_API_BASE` (optional, default: `https://api.linkedin.com`)
 
-Some social networks (X, Threads, TikTok) usually require official APIs, credentials, and policy-compliant access for reliable coverage. The collector module is adapter-based so those sources can be added later.
+X collection is API-only (no scraping). Set:
+- `COMMS_X_BEARER_TOKEN` (required for X collection)
+- `COMMS_X_API_BASE` (optional, default: `https://api.x.com`)
+
+Some social networks (Threads, TikTok) usually require official APIs, credentials, and policy-compliant access for reliable coverage. The collector module is adapter-based so those sources can be added later.
 
 ## Validation
 
