@@ -50,7 +50,7 @@ PROMPT_PRESETS: dict[str, dict] = {
 # Time-window extraction helpers
 # ---------------------------------------------------------------------------
 _TIME_RE = re.compile(
-    r"(?:last|past|in the last|over the last)\s+(\d+)\s*(hour|hours|hr|hrs|day|days|week|weeks)",
+    r"(?:last|past|in the last|over the last)\s+(\d+)\s*(hours|hour|hrs|hr|days|day|weeks|week)",
     re.IGNORECASE,
 )
 
@@ -154,12 +154,18 @@ def _extract_topic(text: str) -> str:
     # Take the first significant noun phrase (heuristic: up to 5 words after
     # common trigger verbs)
     trigger = re.search(
-        r"(?:about|monitor|track|analyse|analyze|watch|research|report on|coverage of|sentiment (?:around|for|on)|focus on)\s+(.+)",
+        r"(?:coverage and sentiment (?:around|for|on)|sentiment (?:around|for|on)|coverage of|about|monitor|track|analyse|analyze|watch|research|report on|focus on)\s+(.+)",
         cleaned,
         re.IGNORECASE,
     )
     if trigger:
         phrase = trigger.group(1).strip()
+        phrase = re.sub(
+            r"^(?:coverage and sentiment|sentiment)\s+(?:around|for|on)\s+",
+            "",
+            phrase,
+            flags=re.IGNORECASE,
+        )
         return " ".join(phrase.split()[:7]).rstrip(".,;")
 
     # Fallback: first non-stopword chunk
@@ -219,7 +225,7 @@ def parse_prompt(prompt: str) -> MonitoringConfig:
     max_items = int(items_match.group(2)) if items_match else 25
 
     return MonitoringConfig(
-        target_name=topic.title(),
+        target_name=topic.strip(),
         launch_name=topic,
         github_terms=unique_terms,
         executive_names=executives,
