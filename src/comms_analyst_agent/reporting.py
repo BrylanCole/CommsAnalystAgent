@@ -100,6 +100,36 @@ def _format_engagement(item) -> str:
     return ", ".join(parts)
 
 
+def _engagement_score(item) -> int:
+    keys = ("score", "num_comments", "points", "reactions", "likes", "reposts", "replies")
+    return sum(value for key in keys if isinstance((value := item.item.engagement.get(key)), int))
+
+
+def _published_timestamp(item) -> float:
+    published_at = item.item.published_at
+    if not published_at:
+        return 0.0
+    try:
+        normalized = published_at.replace("Z", "+00:00")
+        parsed = dt.datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed.timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _headline_priority_key(item) -> tuple[int, int, float, float]:
+    engagement = _engagement_score(item)
+    published_ts = _published_timestamp(item)
+    return (
+        int(engagement > 0),
+        engagement,
+        published_ts,
+        item.confidence,
+    )
+
+
 def _majority_sentiment(sentiment_counts: dict[str, int]) -> str:
     if not sentiment_counts:
         return "No dominant sentiment (no items)"
@@ -233,7 +263,7 @@ def build_slack_summary(
             "*Top Headlines*",
             *[
                 f"• {_display_channel(item.item.channel)} — <{item.item.url}|{item.item.title}>"
-                for item in (article_items[:5] or sorted_items[:5])
+                for item in sorted((article_items or sorted_items), key=_headline_priority_key, reverse=True)[:5]
             ],
         ]
     )
