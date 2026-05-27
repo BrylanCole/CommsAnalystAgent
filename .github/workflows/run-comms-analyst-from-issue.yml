@@ -50,31 +50,48 @@ jobs:
           body = issue.get("body") or ""
           issue_number = issue.get("number")
 
-          heading_patterns = [
-              r"### Monitoring prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
-              r"### Prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
-          ]
+          def extract_section(patterns):
+              for pattern in patterns:
+                  match = re.search(pattern, body, re.IGNORECASE)
+                  if match:
+                      value = match.group(1).strip()
+                      value = "\n".join(
+                          line for line in value.splitlines() if not line.strip().startswith("<!--")
+                      ).strip()
+                      if value:
+                          return value
+              return ""
 
-          prompt = ""
-          for pattern in heading_patterns:
-              match = re.search(pattern, body, re.IGNORECASE)
-              if match:
-                  prompt = match.group(1).strip()
-                  break
-
-          if prompt:
-              prompt = "\n".join(
-                  line for line in prompt.splitlines() if not line.strip().startswith("<!--")
-              ).strip()
+          prompt = extract_section(
+              [
+                  r"### Monitoring prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
+                  r"### Prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
+              ]
+          )
+          slack_destination = extract_section(
+              [
+                  r"### Slack recipient \(User ID or Channel ID\)\s*\n([\s\S]*?)(?:\n### |\Z)",
+                  r"### Slack recipient\s*\n([\s\S]*?)(?:\n### |\Z)",
+              ]
+          )
 
           if not prompt:
               raise SystemExit("Could not extract prompt from issue body.")
+          if not slack_destination:
+              raise SystemExit("Could not extract Slack recipient from issue body.")
 
           output_dir = f"outputs/issues/{issue_number}/{os.environ['RUN_ID']}"
+          requester = (issue.get("user") or {}).get("login") or "unknown"
+          issue_title = issue.get("title") or f"Issue #{issue_number}"
           github_output = Path(os.environ["GITHUB_OUTPUT"])
           with github_output.open("a", encoding="utf-8") as fh:
               fh.write(f"issue_number={issue_number}\n")
               fh.write(f"output_dir={output_dir}\n")
+              fh.write(f"requester={requester}\n")
+              fh.write("issue_title<<EOF\n")
+              fh.write(issue_title + "\n")
+              fh.write("EOF\n")
+              fh.write(f"slack_destination={slack_destination}\n")
               fh.write("prompt<<EOF\n")
               fh.write(prompt + "\n")
               fh.write("EOF\n")
@@ -95,6 +112,115 @@ jobs:
           path: ${{ steps.extract.outputs.output_dir }}/
           if-no-files-found: warn
 
+      - name: Send success notification to Slack
+        if: success()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DESTINATION: ${{ steps.extract.outputs.slack_destination }}
+          OUTPUT_DIR: ${{ steps.extract.outputs.output_dir }}
+          ISSUE_NUMBER: ${{ steps.extract.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.extract.outputs.issue_title }}
+          REQUESTER: ${{ steps.extract.outputs.requester }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_NAME: comms-analyst-issue-${{ steps.extract.outputs.issue_number }}-${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+          destination = os.environ.get("SLACK_DESTINATION", "").strip()
+          if not token:
+              raise SystemExit("Missing SLACK_BOT_TOKEN repository secret.")
+          if not destination:
+              raise SystemExit("Missing Slack destination from issue form.")
+
+          output_dir = Path(os.environ["OUTPUT_DIR"])
+          report_candidates = sorted(output_dir.glob("*/*/report.md"))
+          report_excerpt = "Report completed. Open workflow artifacts for full markdown and JSON outputs."
+          if report_candidates:
+              report_text = report_candidates[0].read_text(encoding="utf-8")
+              lines = [line.strip() for line in report_text.splitlines() if line.strip()]
+              report_excerpt = "\n".join(lines[:30]).strip()
+
+          prefix = (
+              f"Comms Analyst report is ready.\n"
+              f"Issue #{os.environ['ISSUE_NUMBER']}: {os.environ['ISSUE_TITLE']}\n"
+              f"Requested by: @{os.environ['REQUESTER']}\n"
+              f"Workflow run: {os.environ['RUN_URL']}\n"
+              f"Artifact: {os.environ['ARTIFACT_NAME']}\n\n"
+              "Report excerpt:\n"
+          )
+          max_length = 3800
+          remaining = max_length - len(prefix)
+          if remaining < 200:
+              remaining = 200
+          excerpt = report_excerpt[:remaining]
+          if len(report_excerpt) > remaining:
+              excerpt += "\n...[truncated in Slack; download artifact for full report]"
+          text = prefix + excerpt
+
+          payload = {"channel": destination, "text": text}
+          req = urllib.request.Request(
+              "https://slack.com/api/chat.postMessage",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": "Bearer " + token,
+                  "Content-Type": "application/json; charset=utf-8",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              data = json.loads(resp.read().decode("utf-8"))
+          if not data.get("ok"):
+              raise SystemExit(f"Slack notification failed: {data}")
+          PY
+
+      - name: Send failure notification to Slack
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DESTINATION: ${{ steps.extract.outputs.slack_destination }}
+          ISSUE_NUMBER: ${{ steps.extract.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.extract.outputs.issue_title }}
+          REQUESTER: ${{ steps.extract.outputs.requester }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+          destination = os.environ.get("SLACK_DESTINATION", "").strip()
+          if not token or not destination:
+              raise SystemExit("Skipping Slack failure notification: missing token or destination.")
+
+          text = (
+              f"Comms Analyst report failed.\n"
+              f"Issue #{os.environ['ISSUE_NUMBER']}: {os.environ['ISSUE_TITLE']}\n"
+              f"Requested by: @{os.environ['REQUESTER']}\n"
+              f"Workflow run: {os.environ['RUN_URL']}\n"
+              "Open the run logs, then update the issue and add the `run-report` label to retry."
+          )
+          payload = {"channel": destination, "text": text}
+          req = urllib.request.Request(
+              "https://slack.com/api/chat.postMessage",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": "Bearer " + token,
+                  "Content-Type": "application/json; charset=utf-8",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              data = json.loads(resp.read().decode("utf-8"))
+          if not data.get("ok"):
+              raise SystemExit(f"Slack notification failed: {data}")
+          PY
+
       - name: Comment success on issue
         if: success()
         uses: actions/github-script@v7
@@ -107,7 +233,8 @@ jobs:
               "",
               `- Workflow run: ${runUrl}`,
               `- Artifact name: \`${artifactName}\``,
-              "- Open the run to download generated `report.md` and `report.json`."
+              "- Open the run to download generated `report.md` and `report.json`.",
+              `- Slack delivery target: \`${{ steps.extract.outputs.slack_destination }}\``
             ].join("\n");
 
             await github.rest.issues.createComment({
@@ -127,7 +254,8 @@ jobs:
               "❌ Report request failed.",
               "",
               `- Workflow run: ${runUrl}`,
-              "- Check the logs for the failing step, then update the issue and add the `run-report` label to retry."
+              "- Check the logs for the failing step, then update the issue and add the `run-report` label to retry.",
+              `- Slack delivery target: \`${{ steps.extract.outputs.slack_destination }}\``
             ].join("\n");
 
             await github.rest.issues.createComment({

@@ -42,6 +42,15 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: slack_destination
+    attributes:
+      label: Slack recipient (User ID or Channel ID)
+      description: Required for delivery. Use a Slack user ID (starts with U) for direct message, or channel ID (starts with C) for channel delivery.
+      placeholder: U01234567 or C01234567
+    validations:
+      required: true
+
   - type: textarea
     id: notes
     attributes:
