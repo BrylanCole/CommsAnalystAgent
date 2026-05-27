@@ -35,10 +35,13 @@ class ReportingTests(unittest.TestCase):
         analysis = analyze_items(items, config)
         report = build_markdown_report(config, analysis)
 
+        self.assertIn("# Target — Deep Sentiment Analysis", report)
         self.assertIn("## Executive Summary", report)
-        self.assertIn("## Sentiment Snapshot", report)
-        self.assertIn("## Media Coverage Summary", report)
-        self.assertIn("## Sources / Evidence", report)
+        self.assertIn("## Social Performance", report)
+        self.assertIn("## Overall Sentiment:", report)
+        self.assertIn("## Key Amplifiers", report)
+        self.assertIn("## Top Risks & Mitigations", report)
+        self.assertIn("## Sources Analyzed", report)
 
     def test_slack_summary_contains_key_sections(self) -> None:
         config = MonitoringConfig(

@@ -26,6 +26,27 @@ def _sentiment_row(label: str, count: int, total: int) -> str:
     return f"| {label} | {count} | {_percent(count, total)}% |"
 
 
+def _markdown_bullets(items: list[str], fallback: str = "No strong signal in this run.") -> str:
+    return _section_items(items, fallback=fallback)
+
+
+def _clean_signal_label(text: str) -> str:
+    prefixes = (
+        "Observed discussion cluster: ",
+        "Emerging: ",
+        "Observed praise: ",
+        "Observed criticism: ",
+        "Observed confusion: ",
+        "Risk narrative: ",
+        "Opportunity narrative: ",
+        "Observed competitor comparison: ",
+    )
+    for prefix in prefixes:
+        if text.startswith(prefix):
+            return text[len(prefix) :]
+    return text
+
+
 def _display_channel(channel: str) -> str:
     return {
         "news": "News",
@@ -83,6 +104,24 @@ def _channel_snapshot(analysis: AggregateAnalysis) -> list[str]:
     return lines
 
 
+def _channel_table_rows(analysis: AggregateAnalysis) -> list[str]:
+    total = len(analysis.analyzed_items)
+    grouped: dict[str, list] = defaultdict(list)
+    for result in analysis.analyzed_items:
+        grouped[result.item.channel].append(result)
+
+    rows: list[str] = []
+    for channel, items in sorted(grouped.items(), key=lambda pair: len(pair[1]), reverse=True):
+        sentiment_counter = Counter(item.sentiment_label for item in items)
+        dominant_sentiment = sentiment_counter.most_common(1)[0][0]
+        theme = _top_theme([theme for item in items for theme in item.themes])
+        rows.append(
+            f"| {_display_channel(channel)} | {len(items)} | {_percent(len(items), total)}% | "
+            f"{dominant_sentiment} | {theme.title()} |"
+        )
+    return rows or ["| No channel data | 0 | 0.0% | N/A | N/A |"]
+
+
 def _key_amplifiers(sorted_items: list, limit: int = 4) -> list[str]:
     lines: list[str] = []
     for item in sorted_items[:limit]:
@@ -95,17 +134,48 @@ def _key_amplifiers(sorted_items: list, limit: int = 4) -> list[str]:
     return lines
 
 
+def _key_amplifier_rows(sorted_items: list, limit: int = 5) -> list[str]:
+    rows: list[str] = []
+    for item in sorted_items[:limit]:
+        engagement = _format_engagement(item) or "N/A"
+        rows.append(
+            f"| {item.item.source} | [{item.item.title}]({item.item.url}) | "
+            f"{_display_channel(item.item.channel)} | {item.sentiment_label} | {engagement} |"
+        )
+    return rows or ["| No amplifier data | N/A | N/A | N/A | N/A |"]
+
+
 def _top_risks_and_actions(analysis: AggregateAnalysis) -> list[str]:
     risks = analysis.risk_narratives[:2] or analysis.criticism_patterns[:2]
     actions = analysis.opportunity_narratives[:1] + analysis.confusion_patterns[:1]
     lines: list[str] = []
     for risk in risks:
-        lines.append(f"• Risk: {risk}.")
+        lines.append(f"• Risk: {_clean_signal_label(risk)}.")
     for action in actions:
-        lines.append(f"• Recommended focus: {action}.")
+        lines.append(f"• Recommended focus: {_clean_signal_label(action)}.")
     if not lines:
         lines.append("• No concentrated risk pattern detected; continue monitoring for changes in tone.")
     return lines
+
+
+def _recommended_actions(analysis: AggregateAnalysis) -> tuple[list[str], list[str]]:
+    immediate = [
+        "Clarify the most repeated confusion or criticism points in outbound messaging.",
+        "Prepare response language for the highest-salience risk narratives and likely follow-up questions.",
+    ]
+    next_actions = [
+        "Amplify credible positive narratives from high-authority or high-engagement sources.",
+        "Track competitor framing and shifts in channel mix during the next monitoring cycle.",
+    ]
+    if analysis.confusion_patterns:
+        immediate.insert(0, f"Address confusion pattern first: {_clean_signal_label(analysis.confusion_patterns[0])}.")
+    if analysis.risk_narratives:
+        immediate.insert(0, f"Mitigate leading risk narrative: {_clean_signal_label(analysis.risk_narratives[0])}.")
+    if analysis.opportunity_narratives:
+        next_actions.insert(0, f"Lean into strongest opportunity narrative: {_clean_signal_label(analysis.opportunity_narratives[0])}.")
+    if analysis.competitive_comparisons:
+        next_actions.append(f"Watch competitor framing: {_clean_signal_label(analysis.competitive_comparisons[0])}.")
+    return immediate[:3], next_actions[:3]
 
 
 def build_slack_summary(
@@ -126,9 +196,18 @@ def build_slack_summary(
 
     headline = f"*{config.target_name} — Deep Sentiment Analysis*"
     timestamp = generated_at.strftime("%B %d, %Y %H:%M UTC")
-    dominant_narrative = "; ".join(analysis.dominant_narratives[:2]) or "Insufficient signal"
-    top_risk = "; ".join(analysis.risk_narratives[:2]) or "No concentrated risk pattern"
-    top_opportunity = "; ".join(analysis.opportunity_narratives[:2]) or "No concentrated opportunity pattern"
+    dominant_narrative = (
+        "; ".join(_clean_signal_label(item) for item in analysis.dominant_narratives[:2])
+        or "Insufficient signal"
+    )
+    top_risk = (
+        "; ".join(_clean_signal_label(item) for item in analysis.risk_narratives[:2])
+        or "No concentrated risk pattern"
+    )
+    top_opportunity = (
+        "; ".join(_clean_signal_label(item) for item in analysis.opportunity_narratives[:2])
+        or "No concentrated opportunity pattern"
+    )
 
     executive_summary = "\n".join(
         [
@@ -154,7 +233,7 @@ def build_slack_summary(
         [
             "*Deep Dive: Top Themes*",
             *[
-                f"• {theme}."
+                f"• {_clean_signal_label(theme)}."
                 for theme in (
                     analysis.emerging_themes[:3]
                     or analysis.dominant_narratives[:3]
@@ -195,67 +274,41 @@ def build_slack_summary(
 def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis) -> str:
     total = len(analysis.analyzed_items)
     counts = defaultdict(int, analysis.sentiment_counts)
+    negative_total = counts["Negative"] + counts["Concerned"] + counts["Skeptical"]
+    positive_total = counts["Positive"] + counts["Excited"]
     sorted_items = sorted(
         analysis.analyzed_items,
         key=lambda x: (x.authority_score, x.confidence),
         reverse=True,
     )
-    top_positive = [
-        f"[{x.item.title}]({x.item.url}) ({x.item.source})"
-        for x in sorted_items
-        if x.sentiment_label in {"Positive", "Excited"}
-    ][:5]
-    top_negative = [
-        f"[{x.item.title}]({x.item.url}) ({x.item.source})"
-        for x in sorted_items
-        if x.sentiment_label in {"Negative", "Concerned", "Skeptical", "Confused"}
-    ][:5]
+    timestamp = dt.datetime.now(dt.timezone.utc).strftime("%B %d, %Y %H:%M UTC")
+    immediate_actions, next_actions = _recommended_actions(analysis)
+    source_lines = [f"[{x.item.title}]({x.item.url}) — {x.item.source}" for x in sorted_items[:12]]
+    theme_lines = [_clean_signal_label(item) for item in (analysis.emerging_themes[:4] or analysis.dominant_narratives[:4])]
+    risk_lines = [_clean_signal_label(item) for item in (analysis.risk_narratives[:3] or analysis.criticism_patterns[:3])]
+    opportunity_lines = [
+        _clean_signal_label(item) for item in (analysis.opportunity_narratives[:3] or analysis.praise_patterns[:3])
+    ]
 
-    media_rows = []
-    for item in sorted_items:
-        if item.item.channel in {"news", "rss", "hackernews"}:
-            media_rows.append(
-                f"| {item.item.source} | [{item.item.title}]({item.item.url}) | {item.sentiment_label} | {item.authority_score:.2f} |"
-            )
-        if len(media_rows) >= 10:
-            break
+    return f"""# {config.target_name} — Deep Sentiment Analysis
 
-    social_highlights = [
-        f"[{x.item.title}]({x.item.url}) — {x.item.channel} ({x.sentiment_label}, confidence {x.confidence:.2f})"
-        for x in sorted_items
-        if x.item.channel in {"reddit", "hackernews"}
-    ][:8]
-
-    evidence_links = [f"- [{x.item.title}]({x.item.url}) — {x.item.source}" for x in sorted_items[:20]]
-
-    return f"""# Communications Intelligence Report: {config.target_name}
+_{timestamp}_
 
 ## Executive Summary
-- **Overall trend:** {analysis.trend_label} (confidence {analysis.trend_confidence:.2f})
-- **Dominant narratives:** {', '.join(analysis.dominant_narratives[:3]) or 'Insufficient signal'}
-- **Top risks:** {', '.join(analysis.risk_narratives[:2]) or 'No concentrated risk pattern'}
-- **Top opportunities:** {', '.join(analysis.opportunity_narratives[:2]) or 'No concentrated opportunity pattern'}
-- **Bottom line:** Reinforce strong narratives, address confusion quickly, and monitor risk narratives for acceleration.
+Over the last {config.time_window_hours} hours, we collected **{total} items** and the overall trend is **{analysis.trend_label}** ({analysis.trend_confidence:.2f} confidence).
 
-### At a Glance
-| Metric | Value |
-|---|---|
-| Target | {config.target_name} |
-| Time window | Last {config.time_window_hours} hours |
-| Total collected items | {total} |
-| Trend confidence | {analysis.trend_confidence:.2f} |
+Negative pressure accounts for **{_percent(negative_total, total)}%** of the sample, while positive momentum accounts for **{_percent(positive_total, total)}%**.
 
-### Observed Evidence vs Inferred Conclusions
-**Observed evidence**
-{_section_items(analysis.observed_evidence)}
+- **Dominant narratives:** {', '.join(_clean_signal_label(item) for item in analysis.dominant_narratives[:3]) or 'Insufficient signal'}
+- **Top risks:** {', '.join(_clean_signal_label(item) for item in analysis.risk_narratives[:2]) or 'No concentrated risk pattern'}
+- **Top opportunities:** {', '.join(_clean_signal_label(item) for item in analysis.opportunity_narratives[:2]) or 'No concentrated opportunity pattern'}
 
-**Inferred conclusions**
-{_section_items(analysis.inferred_conclusions)}
+## Social Performance
+| Channel | Volume | Share | Dominant sentiment | Key character |
+|---|---:|---:|---|---|
+{chr(10).join(_channel_table_rows(analysis))}
 
-**Uncertainty flags**
-{_section_items(analysis.uncertainty_flags, fallback='No explicit uncertainty flags for this run.')}
-
-## Sentiment Snapshot
+## Overall Sentiment: {_trend_emoji(analysis.trend_label)} {analysis.trend_label}
 | Sentiment | Count | Share |
 |---|---:|---:|
 {_sentiment_row('Positive', counts['Positive'], total)}
@@ -267,40 +320,42 @@ def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis)
 {_sentiment_row('Confused', counts['Confused'], total)}
 {_sentiment_row('Mixed', counts['Mixed'], total)}
 
-- Momentum trend label: **{analysis.trend_label}**
+## Key Amplifiers
+| Source | Item | Channel | Sentiment | Signal |
+|---|---|---|---|---|
+{chr(10).join(_key_amplifier_rows(sorted_items))}
 
-## Top Positive Reactions
-{_section_items(top_positive)}
-
-## Top Negative Reactions
-{_section_items(top_negative)}
-
-## Emerging Narratives
-{_section_items(analysis.emerging_themes)}
+## Deep Dive: Top Themes
+{_markdown_bullets(theme_lines, fallback='No strong recurring theme identified.')}
 
 ### Competitive Comparisons
-{_section_items(analysis.competitive_comparisons)}
+{_markdown_bullets([_clean_signal_label(item) for item in analysis.competitive_comparisons], fallback='No strong competitor-comparison signal detected in collected sample.')}
 
-## Media Coverage Summary
-| Outlet | Headline | Sentiment | Reach/importance |
-|---|---|---|---|
-{chr(10).join(media_rows) if media_rows else '| No media items | N/A | N/A | N/A |'}
+## Top Risks & Mitigations
+### Risk signals
+{_markdown_bullets(risk_lines, fallback='No concentrated risk pattern detected in this run.')}
 
-## Social/Community Conversation Highlights
-{_section_items(social_highlights)}
+### Opportunity signals
+{_markdown_bullets(opportunity_lines, fallback='No concentrated opportunity pattern detected in this run.')}
 
-## Recommendations
 ### Immediate actions (0–24h)
-- Clarify misunderstood topics highlighted in confusion patterns.
-- Prepare response language for recurring criticism and risk patterns.
+{_markdown_bullets(immediate_actions)}
 
 ### Next actions (24–72h)
-- Amplify positive narratives from high-authority outlets and credible community voices.
-- Track competitor framing and adjust positioning where comparisons appear repeatedly.
-- Re-run monitoring during the next 24-hour cycle to validate trend direction.
+{_markdown_bullets(next_actions)}
 
-## Sources / Evidence
-{_section_items(evidence_links)}
+## Observed Evidence vs Inferred Conclusions
+### Observed evidence
+{_markdown_bullets(analysis.observed_evidence)}
+
+### Inferred conclusions
+{_markdown_bullets(analysis.inferred_conclusions)}
+
+### Uncertainty flags
+{_markdown_bullets(analysis.uncertainty_flags, fallback='No explicit uncertainty flags for this run.')}
+
+## Sources Analyzed
+{_markdown_bullets(source_lines)}
 """
 
 
