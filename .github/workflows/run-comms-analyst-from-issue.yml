@@ -184,30 +184,68 @@ jobs:
 
           output_dir = Path(os.environ["OUTPUT_DIR"])
           report_candidates = sorted(output_dir.glob("*/*/report.md"))
-          report_excerpt = "Report completed. Open workflow artifacts for full markdown and JSON outputs."
-          if report_candidates:
+          slack_candidates = sorted(output_dir.glob("*/*/report_slack.txt"))
+          summary_text = "Report completed. Open workflow artifacts for full markdown and JSON outputs."
+          if slack_candidates:
+              summary_text = slack_candidates[0].read_text(encoding="utf-8").strip()
+          elif report_candidates:
               report_text = report_candidates[0].read_text(encoding="utf-8")
               lines = [line.strip() for line in report_text.splitlines() if line.strip()]
-              report_excerpt = "\n".join(lines[:30]).strip()
+              summary_text = "\n".join(lines[:30]).strip()
 
-          prefix = (
-              f"Comms Analyst report is ready.\n"
-              f"Issue #{os.environ['ISSUE_NUMBER']}: {os.environ['ISSUE_TITLE']}\n"
-              f"Requested by: @{os.environ['REQUESTER']}\n"
-              f"Workflow run: {os.environ['RUN_URL']}\n"
-              f"Artifact: {os.environ['ARTIFACT_NAME']}\n\n"
-              "Report excerpt:\n"
+          sections = [section.strip() for section in summary_text.split("\n\n") if section.strip()]
+          blocks = [
+              {
+                  "type": "header",
+                  "text": {"type": "plain_text", "text": "Comms Analyst report is ready"},
+              },
+              {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": (
+                          f"*Issue:* #{os.environ['ISSUE_NUMBER']} — {os.environ['ISSUE_TITLE']}\n"
+                          f"*Requested by:* @{os.environ['REQUESTER']}\n"
+                          f"*Workflow run:* <{os.environ['RUN_URL']}|Open run>\n"
+                          f"*Artifact:* `{os.environ['ARTIFACT_NAME']}`"
+                      ),
+                  },
+              },
+              {"type": "divider"},
+          ]
+          for section in sections:
+              blocks.append(
+                  {
+                      "type": "section",
+                      "text": {"type": "mrkdwn", "text": section[:2900]},
+                  }
+              )
+          if len(blocks) > 48:
+              blocks = blocks[:48]
+              blocks.append(
+                  {
+                      "type": "context",
+                      "elements": [
+                          {
+                              "type": "mrkdwn",
+                              "text": "Slack preview truncated; open the workflow artifact for the full report.",
+                          }
+                      ],
+                  }
+              )
+
+          fallback_text = (
+              f"Comms Analyst report is ready for issue #{os.environ['ISSUE_NUMBER']}.\n"
+              f"Requested by @{os.environ['REQUESTER']}.\n"
+              f"Workflow run: {os.environ['RUN_URL']}\n\n"
+              f"{summary_text[:2500]}"
           )
-          max_length = 3800
-          remaining = max_length - len(prefix)
-          if remaining < 200:
-              remaining = 200
-          excerpt = report_excerpt[:remaining]
-          if len(report_excerpt) > remaining:
-              excerpt += "\n...[truncated in Slack; download artifact for full report]"
-          text = prefix + excerpt
 
-          slack_api(token, "chat.postMessage", {"channel": destination, "text": text})
+          slack_api(
+              token,
+              "chat.postMessage",
+              {"channel": destination, "text": fallback_text, "blocks": blocks},
+          )
           PY
 
       - name: Send failure notification to Slack
