@@ -94,12 +94,72 @@ class ReportingTests(unittest.TestCase):
         summary = build_slack_summary(config, analysis)
 
         self.assertIn("*Target — Deep Sentiment Analysis*", summary)
-        self.assertIn("*Executive Summary*", summary)
-        self.assertIn("*Channel Snapshot*", summary)
-        self.assertIn("LinkedIn", summary)
-        self.assertIn("*Key Amplifiers*", summary)
-        self.assertIn("*Top Risks & Recommended Focus*", summary)
-        self.assertIn("*Sources Analyzed*", summary)
+        self.assertIn("*Coverage Totals*", summary)
+        self.assertIn("Total # of articles:", summary)
+        self.assertIn("Total # of posts:", summary)
+        self.assertIn("*Top Headlines*", summary)
+        self.assertIn("Majority sentiment:", summary)
+        self.assertIn("*Key Themes / Messages*", summary)
+        self.assertIn("*Top News Mentioned*", summary)
+        self.assertIn("*Competitor Mentions / Comparisons*", summary)
+        self.assertIn("*Direct Social Post Links*", summary)
+
+    def test_slack_top_headlines_prioritizes_engagement_and_recency(self) -> None:
+        config = MonitoringConfig(
+            target_name="Target",
+            launch_name="Launch",
+            github_terms=["GitHub"],
+            executive_names=[],
+            hashtags=[],
+            competitors=[],
+            time_window_hours=24,
+            rss_feeds=[],
+            max_items_per_source=5,
+        )
+        items = [
+            ContentItem(
+                title="High authority older item",
+                url="https://github.blog/changelog",
+                source="GitHub Blog",
+                author=None,
+                published_at="2026-01-01T00:00:00+00:00",
+                snippet="announced details",
+                content="announced details",
+                channel="news",
+                engagement={},
+            ),
+            ContentItem(
+                title="Recent lower-authority item",
+                url="https://example.com/recent",
+                source="Example News",
+                author=None,
+                published_at="2026-01-03T00:00:00+00:00",
+                snippet="announced details",
+                content="announced details",
+                channel="news",
+                engagement={},
+            ),
+            ContentItem(
+                title="Older but high-engagement item",
+                url="https://example.com/high-engagement",
+                source="Example News",
+                author=None,
+                published_at="2026-01-02T00:00:00+00:00",
+                snippet="announced details",
+                content="announced details",
+                channel="news",
+                engagement={"score": 50, "num_comments": 10},
+            ),
+        ]
+        analysis = analyze_items(items, config)
+        summary = build_slack_summary(config, analysis)
+        lines = summary.splitlines()
+        headline_index = lines.index("*Top Headlines*")
+        headline_lines = [line for line in lines[headline_index + 1 :] if line.startswith("• ")][:3]
+
+        self.assertIn("Older but high-engagement item", headline_lines[0])
+        self.assertIn("Recent lower-authority item", headline_lines[1])
+        self.assertIn("High authority older item", headline_lines[2])
 
 
 if __name__ == "__main__":

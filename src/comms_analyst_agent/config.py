@@ -4,13 +4,16 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_SOURCES: list[str] = ["news", "rss", "reddit", "hackernews", "linkedin"]
+DEFAULT_SOURCES: list[str] = ["news", "rss", "reddit", "hackernews", "linkedin", "x"]
 SOURCE_ALIASES: dict[str, str] = {
     "hacker news": "hackernews",
     "hn": "hackernews",
     "google news": "news",
     "article": "news",
     "articles": "news",
+    "twitter": "x",
+    "tweet": "x",
+    "tweets": "x",
 }
 
 

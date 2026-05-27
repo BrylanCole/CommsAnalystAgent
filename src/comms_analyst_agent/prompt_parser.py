@@ -84,6 +84,8 @@ def _extract_hashtags(text: str) -> list[str]:
 _SOURCE_MAP: dict[str, list[str]] = {
     "reddit": ["reddit"],
     "linkedin": ["linkedin"],
+    "x": ["x"],
+    "twitter": ["x"],
     "hacker news": ["hackernews"],
     "hn": ["hackernews"],
     "news": ["news"],

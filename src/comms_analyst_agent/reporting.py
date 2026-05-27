@@ -54,6 +54,7 @@ def _display_channel(channel: str) -> str:
         "reddit": "Reddit",
         "hackernews": "Hacker News",
         "linkedin": "LinkedIn",
+        "x": "X",
     }.get(channel, channel.replace("_", " ").title())
 
 
@@ -78,13 +79,62 @@ def _format_engagement(item) -> str:
     score = item.item.engagement.get("score")
     comments = item.item.engagement.get("num_comments")
     points = item.item.engagement.get("points")
+    reactions = item.item.engagement.get("reactions")
+    likes = item.item.engagement.get("likes")
+    reposts = item.item.engagement.get("reposts")
+    replies = item.item.engagement.get("replies")
     if isinstance(score, int):
         parts.append(f"score {score}")
     if isinstance(comments, int):
         parts.append(f"{comments} comments")
     if isinstance(points, int):
         parts.append(f"{points} points")
+    if isinstance(reactions, int):
+        parts.append(f"{reactions} reactions")
+    if isinstance(likes, int):
+        parts.append(f"{likes} likes")
+    if isinstance(reposts, int):
+        parts.append(f"{reposts} reposts")
+    if isinstance(replies, int):
+        parts.append(f"{replies} replies")
     return ", ".join(parts)
+
+
+def _engagement_score(item) -> int:
+    keys = ("score", "num_comments", "points", "reactions", "likes", "reposts", "replies")
+    return sum(value for key in keys if isinstance((value := item.item.engagement.get(key)), int))
+
+
+def _published_timestamp(item) -> float:
+    published_at = item.item.published_at
+    if not published_at:
+        return 0.0
+    try:
+        normalized = published_at.replace("Z", "+00:00")
+        parsed = dt.datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed.timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _headline_priority_key(item) -> tuple[int, int, float, float]:
+    engagement = _engagement_score(item)
+    published_ts = _published_timestamp(item)
+    return (
+        int(engagement > 0),
+        engagement,
+        published_ts,
+        item.confidence,
+    )
+
+
+def _majority_sentiment(sentiment_counts: dict[str, int]) -> str:
+    if not sentiment_counts:
+        return "No dominant sentiment (no items)"
+    label, count = max(sentiment_counts.items(), key=lambda pair: pair[1])
+    return f"{label} ({count})"
 
 
 def _channel_snapshot(analysis: AggregateAnalysis) -> list[str]:
@@ -187,88 +237,97 @@ def build_slack_summary(
     generated_at = generated_at or dt.datetime.now(dt.timezone.utc)
     total = len(analysis.analyzed_items)
     counts = defaultdict(int, analysis.sentiment_counts)
-    negative_total = counts["Negative"] + counts["Concerned"] + counts["Skeptical"]
-    positive_total = counts["Positive"] + counts["Excited"]
     sorted_items = sorted(
         analysis.analyzed_items,
         key=lambda x: (x.authority_score, x.confidence),
         reverse=True,
     )
+    article_items = [item for item in sorted_items if item.item.channel in {"news", "rss"}]
+    social_items = [item for item in sorted_items if item.item.channel in {"reddit", "linkedin", "x", "hackernews"}]
 
     headline = f"*{config.target_name} — Deep Sentiment Analysis*"
     timestamp = generated_at.strftime("%B %d, %Y %H:%M UTC")
-    dominant_narrative = (
-        "; ".join(_clean_signal_label(item) for item in analysis.dominant_narratives[:2])
-        or "Insufficient signal"
-    )
-    top_risk = (
-        "; ".join(_clean_signal_label(item) for item in analysis.risk_narratives[:2])
-        or "No concentrated risk pattern"
-    )
-    top_opportunity = (
-        "; ".join(_clean_signal_label(item) for item in analysis.opportunity_narratives[:2])
-        or "No concentrated opportunity pattern"
-    )
-
-    executive_summary = "\n".join(
+    totals = "\n".join(
         [
-            "*Executive Summary*",
-            (
-                f"• Over the last {config.time_window_hours} hours, we collected {total} items and the overall trend is "
-                f"{_trend_emoji(analysis.trend_label)} {analysis.trend_label.lower()} "
-                f"(confidence {analysis.trend_confidence:.2f})."
-            ),
-            (
-                f"• Negative pressure accounts for {_percent(negative_total, total)}% of the sample; "
-                f"positive momentum accounts for {_percent(positive_total, total)}%."
-            ),
-            f"• Dominant narratives: {dominant_narrative}.",
-            f"• Top risks: {top_risk}.",
-            f"• Top opportunities: {top_opportunity}.",
+            "*Coverage Totals*",
+            f"• Total # of articles: {len(article_items)}",
+            f"• Total # of posts: {len(social_items)}",
+            f"• Total analyzed items: {total}",
+            f"• Majority sentiment: {_majority_sentiment(dict(counts))}",
+            f"• Overall trend: {_trend_emoji(analysis.trend_label)} {analysis.trend_label} ({analysis.trend_confidence:.2f})",
         ]
     )
 
-    channel_snapshot = "\n".join(["*Channel Snapshot*", *_channel_snapshot(analysis)])
-    key_amplifiers = "\n".join(["*Key Amplifiers*", *_key_amplifiers(sorted_items)])
-    deep_dive = "\n".join(
+    top_headlines = "\n".join(
         [
-            "*Deep Dive: Top Themes*",
+            "*Top Headlines*",
             *[
-                f"• {_clean_signal_label(theme)}."
+                f"• {_display_channel(item.item.channel)} — <{item.item.url}|{item.item.title}>"
+                for item in sorted((article_items or sorted_items), key=_headline_priority_key, reverse=True)[:5]
+            ],
+        ]
+    )
+
+    key_themes = "\n".join(
+        [
+            "*Key Themes / Messages*",
+            *[
+                f"• {_clean_signal_label(theme)}"
                 for theme in (
-                    analysis.emerging_themes[:3]
-                    or analysis.dominant_narratives[:3]
+                    analysis.emerging_themes[:4]
+                    or analysis.dominant_narratives[:4]
                     or ["No strong recurring theme identified."]
                 )
             ],
         ]
     )
-    risks_and_actions = "\n".join(["*Top Risks & Recommended Focus*", *_top_risks_and_actions(analysis)])
-    sources = "\n".join(
+
+    top_news = "\n".join(
         [
-            "*Sources Analyzed*",
+            "*Top News Mentioned*",
             *[
                 f"• {item.item.source} — <{item.item.url}|{item.item.title}>"
-                for item in sorted_items[:6]
+                for item in article_items[:4]
             ],
         ]
+        if article_items
+        else ["*Top News Mentioned*", "• No article links were collected in this run."]
     )
-    uncertainty = ""
-    if analysis.uncertainty_flags:
-        uncertainty = "\n".join(["*Uncertainty Flags*", *[f"• {flag}" for flag in analysis.uncertainty_flags[:2]]])
+
+    competitor_mentions = "\n".join(
+        [
+            "*Competitor Mentions / Comparisons*",
+            *[
+                f"• {_clean_signal_label(item)}"
+                for item in analysis.competitive_comparisons[:4]
+            ],
+        ]
+        if analysis.competitive_comparisons
+        else ["*Competitor Mentions / Comparisons*", "• No strong competitor-comparison signal detected in collected sample."]
+    )
+
+    social_links = "\n".join(
+        [
+            "*Direct Social Post Links*",
+            *[
+                f"• {_display_channel(item.item.channel)} — <{item.item.url}|{item.item.title}>"
+                for item in social_items[:6]
+            ],
+        ]
+        if social_items
+        else ["*Direct Social Post Links*", "• No social post links were collected in this run."]
+    )
 
     sections = [
         headline,
         timestamp,
-        executive_summary,
-        channel_snapshot,
-        key_amplifiers,
-        deep_dive,
-        risks_and_actions,
-        sources,
+        totals,
+        top_headlines,
+        key_themes,
+        top_news,
+        competitor_mentions,
+        social_links,
     ]
-    if uncertainty:
-        sections.append(uncertainty)
     return "\n\n".join(section for section in sections if section).strip()
 
 

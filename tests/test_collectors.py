@@ -2,7 +2,7 @@ import urllib.error
 import unittest
 from unittest import mock
 
-from comms_analyst_agent.collectors import collect_all, collect_linkedin, collect_rss_feeds
+from comms_analyst_agent.collectors import collect_all, collect_linkedin, collect_rss_feeds, collect_x_posts
 from comms_analyst_agent.config import MonitoringConfig
 from comms_analyst_agent.models import ContentItem
 
@@ -18,7 +18,7 @@ def _config(**overrides) -> MonitoringConfig:
         time_window_hours=24,
         rss_feeds=["https://example.com/feed.xml"],
         max_items_per_source=2,
-        sources=["news", "rss", "reddit", "hackernews", "linkedin"],
+        sources=["news", "rss", "reddit", "hackernews", "linkedin", "x"],
     )
     for key, value in overrides.items():
         setattr(base, key, value)
@@ -27,6 +27,7 @@ def _config(**overrides) -> MonitoringConfig:
 
 class CollectAllSelectionTests(unittest.TestCase):
     @mock.patch("comms_analyst_agent.collectors.collect_linkedin")
+    @mock.patch("comms_analyst_agent.collectors.collect_x_posts")
     @mock.patch("comms_analyst_agent.collectors.collect_rss_feeds")
     @mock.patch("comms_analyst_agent.collectors.collect_hacker_news")
     @mock.patch("comms_analyst_agent.collectors.collect_reddit")
@@ -37,18 +38,20 @@ class CollectAllSelectionTests(unittest.TestCase):
         mock_reddit,
         mock_hn,
         mock_rss,
+        mock_x,
         mock_linkedin,
     ) -> None:
         mock_news.return_value = [ContentItem("n", "https://n", "News", None, None, "", "", "news", {})]
         mock_reddit.return_value = [ContentItem("r", "https://r", "Reddit", None, None, "", "", "reddit", {})]
         mock_hn.return_value = [ContentItem("h", "https://h", "HN", None, None, "", "", "hackernews", {})]
         mock_rss.return_value = [ContentItem("s", "https://s", "RSS", None, None, "", "", "rss", {})]
+        mock_x.return_value = [ContentItem("x", "https://x", "X", None, None, "", "", "x", {})]
         mock_linkedin.return_value = [ContentItem("l", "https://l", "LinkedIn", None, None, "", "", "linkedin", {})]
 
-        cfg = _config(sources=["linkedin", "reddit"])
+        cfg = _config(sources=["linkedin", "reddit", "x"])
         items = collect_all(cfg)
 
-        self.assertEqual({item.channel for item in items}, {"linkedin", "reddit"})
+        self.assertEqual({item.channel for item in items}, {"linkedin", "reddit", "x"})
         mock_news.assert_not_called()
         mock_rss.assert_not_called()
         mock_hn.assert_not_called()
@@ -97,6 +100,38 @@ class LinkedInCollectorTests(unittest.TestCase):
         self.assertEqual(items[0].source, "LinkedIn")
         self.assertEqual(items[0].engagement.get("reactions"), 10)
         self.assertGreaterEqual(mock_get.call_count, 1)
+
+
+class XCollectorTests(unittest.TestCase):
+    def test_returns_empty_without_token(self) -> None:
+        cfg = _config(sources=["x"])
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(collect_x_posts(cfg), [])
+
+    def test_maps_response_records(self) -> None:
+        cfg = _config(sources=["x"], max_items_per_source=2)
+        payload = {
+            "data": [
+                {
+                    "id": "123",
+                    "author_id": "a1",
+                    "text": "Launch reactions on X",
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "public_metrics": {"like_count": 5, "retweet_count": 2, "reply_count": 1, "quote_count": 0},
+                }
+            ],
+            "includes": {"users": [{"id": "a1", "username": "authorx", "name": "Author X"}]},
+        }
+        with (
+            mock.patch.dict("os.environ", {"COMMS_X_BEARER_TOKEN": "token"}, clear=True),
+            mock.patch("comms_analyst_agent.collectors._http_get_json", return_value=payload),
+        ):
+            items = collect_x_posts(cfg)
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].channel, "x")
+        self.assertIn("https://x.com/authorx/status/123", items[0].url)
+        self.assertEqual(items[0].engagement.get("likes"), 5)
 
 
 class ArticleDomainFilterTests(unittest.TestCase):

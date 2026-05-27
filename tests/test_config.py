@@ -17,10 +17,11 @@ class ConfigTests(unittest.TestCase):
             competitors=[],
             time_window_hours=24,
             rss_feeds=[],
-            sources=["Hacker News", "LinkedIn", "news"],
+            sources=["Hacker News", "LinkedIn", "Twitter", "news"],
         )
         self.assertIn("hackernews", config.enabled_sources)
         self.assertIn("linkedin", config.enabled_sources)
+        self.assertIn("x", config.enabled_sources)
         self.assertIn("news", config.enabled_sources)
 
     def test_load_config_defaults_new_fields(self) -> None:

@@ -11,6 +11,6 @@
     "https://hnrss.org/frontpage"
   ],
   "max_items_per_source": 20,
-  "sources": ["news", "rss", "reddit", "hackernews"],
+  "sources": ["news", "rss", "reddit", "hackernews", "linkedin", "x"],
   "article_domains": ["github.blog", "techcrunch.com"]
 }
