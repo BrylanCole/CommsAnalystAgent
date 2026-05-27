@@ -103,6 +103,9 @@ outputs/<topic-name>/<timestamp>/report.json ← structured data
 - `config/monitoring_target.sample.json` – sample monitoring target configuration
 - `config/templates/` – prompt template reference files for common use cases
 - `.github/workflows/run-comms-analyst-agent.yml` – manual/scheduled GitHub Actions execution
+- `.github/workflows/run-comms-analyst-from-issue.yml` – issue-triggered GitHub Actions execution
+- `.github/ISSUE_TEMPLATE/report-request.yml` – report request issue form
+- `docs/index.md` – optional GitHub Pages landing page for team links
 
 ## Chat mode (prompt-driven)
 
@@ -193,6 +196,47 @@ Workflow: `.github/workflows/run-comms-analyst-agent.yml`
 - **Config mode**: leave Prompt blank and optionally provide a config path
 - Runs automatically every 12 hours (`schedule`)
 - Uploads generated reports as workflow artifacts
+
+## GitHub-native team request interface (Issues + Actions + Pages)
+
+Use GitHub itself as the team-facing prompt interface (no always-on Render cost):
+
+1. Team member opens **Report Request** issue using:
+   - `.github/ISSUE_TEMPLATE/report-request.yml`
+   - If the template chooser is not shown, open:
+     - `https://github.com/<owner>/<repo>/issues/new?template=report-request.yml`
+2. Workflow `.github/workflows/run-comms-analyst-from-issue.yml` triggers on issue creation (or when `run-report` label is added).
+3. Workflow extracts the plain-English prompt, runs:
+   - `comms-analyst-chat --prompt "..."`
+4. Outputs are uploaded as artifacts, sent as plain-text summary to the requester on Slack, and a bot comment is posted back to the issue with run details.
+
+Optional front-door URL via GitHub Pages:
+- `docs/index.md` links to:
+  - new report request form
+  - report workflow runs
+  - recent successful runs
+
+### Enable the team interface
+
+1. In repository **Settings → General → Features**, ensure **Issues** is enabled.
+2. (Optional) In **Settings → Pages**, set:
+   - **Source**: `Deploy from a branch`
+   - **Branch**: your default branch, folder `/docs`
+3. Keep repository private and manage team access with GitHub repo permissions.
+
+### Slack delivery setup (issue requests)
+
+The issue form includes **Slack recipient (User ID or Channel ID)**:
+- User ID example (direct message): `U01234567`
+- Channel ID example: `C01234567`
+
+Add this repository secret:
+- `SLACK_BOT_TOKEN` — Bot token with permission to post messages.
+
+Recommended Slack app scopes:
+- `chat:write`
+- `chat:write.public` (if posting to public channels)
+- `im:write` (if sending direct messages to user IDs)
 
 ## Shareable team URL (hosted deployment)
 

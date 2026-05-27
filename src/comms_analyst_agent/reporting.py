@@ -21,6 +21,10 @@ def _section_items(items: list[str], fallback: str = "No strong signal in this r
     return "\n".join(f"- {item}" for item in items)
 
 
+def _sentiment_row(label: str, count: int, total: int) -> str:
+    return f"| {label} | {count} | {_percent(count, total)}% |"
+
+
 def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis) -> str:
     total = len(analysis.analyzed_items)
     counts = defaultdict(int, analysis.sentiment_counts)
@@ -60,12 +64,19 @@ def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis)
     return f"""# Communications Intelligence Report: {config.target_name}
 
 ## Executive Summary
-- Overall sentiment trend: **{analysis.trend_label}** (confidence {analysis.trend_confidence:.2f}).
-- Dominant narratives: {', '.join(analysis.dominant_narratives[:3]) or 'Insufficient signal'}.
-- Key risks: {', '.join(analysis.risk_narratives[:2]) or 'No concentrated risk pattern'}.
-- Key opportunities: {', '.join(analysis.opportunity_narratives[:2]) or 'No concentrated opportunity pattern'}.
-- Most influential reactions came from higher-authority sources and high-confidence items.
-- Recommendation summary: reinforce high-performing narratives, address confusion quickly, and monitor risk narratives for acceleration.
+- **Overall trend:** {analysis.trend_label} (confidence {analysis.trend_confidence:.2f})
+- **Dominant narratives:** {', '.join(analysis.dominant_narratives[:3]) or 'Insufficient signal'}
+- **Top risks:** {', '.join(analysis.risk_narratives[:2]) or 'No concentrated risk pattern'}
+- **Top opportunities:** {', '.join(analysis.opportunity_narratives[:2]) or 'No concentrated opportunity pattern'}
+- **Bottom line:** Reinforce strong narratives, address confusion quickly, and monitor risk narratives for acceleration.
+
+### At a Glance
+| Metric | Value |
+|---|---|
+| Target | {config.target_name} |
+| Time window | Last {config.time_window_hours} hours |
+| Total collected items | {total} |
+| Trend confidence | {analysis.trend_confidence:.2f} |
 
 ### Observed Evidence vs Inferred Conclusions
 **Observed evidence**
@@ -78,15 +89,17 @@ def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis)
 {_section_items(analysis.uncertainty_flags, fallback='No explicit uncertainty flags for this run.')}
 
 ## Sentiment Snapshot
-- Total collected items: {total}
-- Positive: {counts['Positive']} ({_percent(counts['Positive'], total)}%)
-- Excited: {counts['Excited']} ({_percent(counts['Excited'], total)}%)
-- Neutral: {counts['Neutral']} ({_percent(counts['Neutral'], total)}%)
-- Negative: {counts['Negative']} ({_percent(counts['Negative'], total)}%)
-- Concerned: {counts['Concerned']} ({_percent(counts['Concerned'], total)}%)
-- Skeptical: {counts['Skeptical']} ({_percent(counts['Skeptical'], total)}%)
-- Confused: {counts['Confused']} ({_percent(counts['Confused'], total)}%)
-- Mixed: {counts['Mixed']} ({_percent(counts['Mixed'], total)}%)
+| Sentiment | Count | Share |
+|---|---:|---:|
+{_sentiment_row('Positive', counts['Positive'], total)}
+{_sentiment_row('Excited', counts['Excited'], total)}
+{_sentiment_row('Neutral', counts['Neutral'], total)}
+{_sentiment_row('Negative', counts['Negative'], total)}
+{_sentiment_row('Concerned', counts['Concerned'], total)}
+{_sentiment_row('Skeptical', counts['Skeptical'], total)}
+{_sentiment_row('Confused', counts['Confused'], total)}
+{_sentiment_row('Mixed', counts['Mixed'], total)}
+
 - Momentum trend label: **{analysis.trend_label}**
 
 ## Top Positive Reactions
@@ -110,9 +123,12 @@ def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis)
 {_section_items(social_highlights)}
 
 ## Recommendations
+### Immediate actions (0–24h)
 - Clarify misunderstood topics highlighted in confusion patterns.
+- Prepare response language for recurring criticism and risk patterns.
+
+### Next actions (24–72h)
 - Amplify positive narratives from high-authority outlets and credible community voices.
-- Prepare response language for recurring criticism/risk patterns.
 - Track competitor framing and adjust positioning where comparisons appear repeatedly.
 - Re-run monitoring during the next 24-hour cycle to validate trend direction.
 
