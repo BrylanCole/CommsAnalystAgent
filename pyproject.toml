@@ -13,6 +13,7 @@ dependencies = []
 [project.scripts]
 comms-analyst-agent = "comms_analyst_agent.cli:main"
 comms-analyst-chat = "comms_analyst_agent.chat:main"
+comms-analyst-web = "comms_analyst_agent.web:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

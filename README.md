@@ -46,6 +46,20 @@ The agent will:
 Track sentiment around GitHub Copilot over the last 72 hours, competitors: OpenAI, GitLab
 ```
 
+### Step 4b — Run in web dashboard mode (minimal UI)
+
+```bash
+comms-analyst-web
+```
+
+Open:
+
+```text
+http://127.0.0.1:8080
+```
+
+Use the prompt box to ask in plain English, then view generated reports from the dashboard list.
+
 ### Step 5 — Find your report
 
 ```text
@@ -102,6 +116,25 @@ Pass a prompt directly (for scripting or CI):
 
 ```bash
 comms-analyst-chat --prompt "Track sentiment around OpenAI Sora last 48 hours" --yes
+```
+
+## Web dashboard mode (prompt + report browser)
+
+Start the local web app:
+
+```bash
+comms-analyst-web --host 127.0.0.1 --port 8080 --output-dir outputs
+```
+
+Then open `http://127.0.0.1:8080`, enter your prompt, and run a report.
+The dashboard lists recent reports with quick links to `report.md` and `report.json`.
+
+Enable access protection (recommended when shared):
+
+```bash
+export COMMS_DASHBOARD_USERNAME=team
+export COMMS_DASHBOARD_PASSWORD='replace-with-strong-password'
+comms-analyst-web --host 0.0.0.0 --port 8080 --require-auth
 ```
 
 ### Prompt examples
@@ -161,6 +194,30 @@ Workflow: `.github/workflows/run-comms-analyst-agent.yml`
 - Runs automatically every 12 hours (`schedule`)
 - Uploads generated reports as workflow artifacts
 
+## Shareable team URL (hosted deployment)
+
+This repo includes deployment files for a permanent team link:
+
+- `Dockerfile`
+- `render.yaml`
+
+### Render setup (recommended)
+
+1. Push your branch/repo to GitHub.
+2. In Render, choose **New + → Blueprint** and select this repository.
+3. Set secret environment variables:
+   - `COMMS_DASHBOARD_USERNAME`
+   - `COMMS_DASHBOARD_PASSWORD`
+4. Deploy. Render provides a hosted URL like:
+   - `https://comms-analyst-dashboard.onrender.com`
+5. Share that URL with your team (they will be prompted for username/password).
+
+Health check endpoint for hosting platforms:
+
+```text
+/health
+```
+
 ## Source limitations and extensibility
 
 This MVP avoids proprietary/private APIs. It is designed for sources that typically work in GitHub-hosted environments.
@@ -180,4 +237,3 @@ Run tests with:
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
-
