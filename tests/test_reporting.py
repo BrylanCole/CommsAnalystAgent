@@ -78,6 +78,17 @@ class ReportingTests(unittest.TestCase):
                 channel="hackernews",
                 engagement={"points": 42},
             ),
+            ContentItem(
+                title="Professionals discuss launch impact",
+                url="https://www.linkedin.com/posts/example",
+                source="LinkedIn",
+                author="author",
+                published_at="2026-01-01",
+                snippet="discussion in industry circles",
+                content="industry professionals discuss launch impact and positioning",
+                channel="linkedin",
+                engagement={"reactions": 14},
+            ),
         ]
         analysis = analyze_items(items, config)
         summary = build_slack_summary(config, analysis)
@@ -85,6 +96,7 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("*Target — Deep Sentiment Analysis*", summary)
         self.assertIn("*Executive Summary*", summary)
         self.assertIn("*Channel Snapshot*", summary)
+        self.assertIn("LinkedIn", summary)
         self.assertIn("*Key Amplifiers*", summary)
         self.assertIn("*Top Risks & Recommended Focus*", summary)
         self.assertIn("*Sources Analyzed*", summary)

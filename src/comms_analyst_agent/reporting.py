@@ -53,6 +53,7 @@ def _display_channel(channel: str) -> str:
         "rss": "RSS",
         "reddit": "Reddit",
         "hackernews": "Hacker News",
+        "linkedin": "LinkedIn",
     }.get(channel, channel.replace("_", " ").title())
 
 
