@@ -1,0 +1,42 @@
+name: Report Request
+description: Request a communications intelligence report using a plain-English prompt.
+title: "[Report Request] "
+labels:
+  - report-request
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a prompt and the agent will run in GitHub Actions.
+        Add the `run-report` label later if you want to re-run this request.
+
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Monitoring prompt
+      description: Describe what the agent should monitor.
+      placeholder: Track sentiment around GitHub Copilot over the last 72 hours, competitors: OpenAI, GitLab
+    validations:
+      required: true
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      description: Optional signal for triage.
+      options:
+        - Standard
+        - High
+        - Critical
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Optional links, constraints, or success criteria.
+      placeholder: Include any context the analyst should consider.
+    validations:
+      required: false

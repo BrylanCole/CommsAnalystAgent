@@ -1,0 +1,138 @@
+name: Run Comms Analyst from Issue
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: report-request-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  run-from-issue:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'report-request') ||
+      (github.event.action == 'labeled' && github.event.label.name == 'run-report')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Extract prompt from issue
+        id: extract
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          event = json.loads(Path(os.environ["EVENT_PATH"]).read_text(encoding="utf-8"))
+          issue = event.get("issue", {})
+          body = issue.get("body") or ""
+          issue_number = issue.get("number")
+
+          heading_patterns = [
+              r"### Monitoring prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
+              r"### Prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
+          ]
+
+          prompt = ""
+          for pattern in heading_patterns:
+              match = re.search(pattern, body, re.IGNORECASE)
+              if match:
+                  prompt = match.group(1).strip()
+                  break
+
+          if prompt:
+              prompt = "\n".join(
+                  line for line in prompt.splitlines() if not line.strip().startswith("<!--")
+              ).strip()
+
+          if not prompt:
+              raise SystemExit("Could not extract prompt from issue body.")
+
+          output_dir = f"outputs/issues/{issue_number}/{os.environ['RUN_ID']}"
+          github_output = Path(os.environ["GITHUB_OUTPUT"])
+          with github_output.open("a", encoding="utf-8") as fh:
+              fh.write(f"issue_number={issue_number}\n")
+              fh.write(f"output_dir={output_dir}\n")
+              fh.write("prompt<<EOF\n")
+              fh.write(prompt + "\n")
+              fh.write("EOF\n")
+          PY
+
+      - name: Run report from prompt
+        env:
+          PROMPT: ${{ steps.extract.outputs.prompt }}
+          OUTPUT_DIR: ${{ steps.extract.outputs.output_dir }}
+        run: |
+          comms-analyst-chat --prompt "$PROMPT" --output-dir "$OUTPUT_DIR" --yes
+
+      - name: Upload generated report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comms-analyst-issue-${{ steps.extract.outputs.issue_number }}-${{ github.run_id }}
+          path: ${{ steps.extract.outputs.output_dir }}/
+          if-no-files-found: warn
+
+      - name: Comment success on issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const artifactName = `comms-analyst-issue-${{ steps.extract.outputs.issue_number }}-${{ github.run_id }}`;
+            const body = [
+              "✅ Report request completed.",
+              "",
+              `- Workflow run: ${runUrl}`,
+              `- Artifact name: \`${artifactName}\``,
+              "- Open the run to download generated `report.md` and `report.json`."
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Comment failure on issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              "❌ Report request failed.",
+              "",
+              `- Workflow run: ${runUrl}`,
+              "- Check the logs for the failing step, then update the issue and add the `run-report` label to retry."
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
