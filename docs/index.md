@@ -2,7 +2,7 @@
 
 Use this GitHub-native portal to request and track reports.
 
-- [Submit a new report request](../../issues/new?template=report-request.yml)
+- [Submit a new report request](../../issues/new?template=report-request.md)
 - [View report workflow runs](../../actions/workflows/run-comms-analyst-from-issue.yml)
 - [View recent successful runs](../../actions/workflows/run-comms-analyst-from-issue.yml?query=is%3Asuccess)
 

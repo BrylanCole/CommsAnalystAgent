@@ -62,6 +62,15 @@ jobs:
                           return value
               return ""
 
+          def normalize_slack_destination(value):
+              value = value.strip()
+              if value.startswith("<") and value.endswith(">"):
+                  value = value[1:-1].strip()
+              if "|" in value:
+                  value = value.split("|", 1)[0].strip()
+              value = value.lstrip("@#").strip()
+              return value
+
           prompt = extract_section(
               [
                   r"### Monitoring prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
@@ -74,6 +83,7 @@ jobs:
                   r"### Slack recipient\s*\n([\s\S]*?)(?:\n### |\Z)",
               ]
           )
+          slack_destination = normalize_slack_destination(slack_destination)
 
           if not prompt:
               raise SystemExit("Could not extract prompt from issue body.")
@@ -130,12 +140,47 @@ jobs:
           import urllib.request
           from pathlib import Path
 
+          def normalize_destination(value):
+              value = value.strip()
+              if value.startswith("<") and value.endswith(">"):
+                  value = value[1:-1].strip()
+              if "|" in value:
+                  value = value.split("|", 1)[0].strip()
+              return value.lstrip("@#").strip()
+
+          def slack_api(token, method, payload):
+              req = urllib.request.Request(
+                  f"https://slack.com/api/{method}",
+                  data=json.dumps(payload).encode("utf-8"),
+                  headers={
+                      "Authorization": "Bearer " + token,
+                      "Content-Type": "application/json; charset=utf-8",
+                  },
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  data = json.loads(resp.read().decode("utf-8"))
+              if not data.get("ok"):
+                  raise SystemExit(f"Slack notification failed ({method}): {data}")
+              return data
+
+          def resolve_channel(token, destination):
+              destination = normalize_destination(destination)
+              if destination[:1] in {"U", "W"}:
+                  data = slack_api(token, "conversations.open", {"users": destination})
+                  channel_id = (data.get("channel") or {}).get("id")
+                  if not channel_id:
+                      raise SystemExit(f"Slack DM open failed: {data}")
+                  return channel_id
+              return destination
+
           token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
           destination = os.environ.get("SLACK_DESTINATION", "").strip()
           if not token:
               raise SystemExit("Missing SLACK_BOT_TOKEN repository secret.")
           if not destination:
               raise SystemExit("Missing Slack destination from issue form.")
+          destination = resolve_channel(token, destination)
 
           output_dir = Path(os.environ["OUTPUT_DIR"])
           report_candidates = sorted(output_dir.glob("*/*/report.md"))
@@ -162,20 +207,7 @@ jobs:
               excerpt += "\n...[truncated in Slack; download artifact for full report]"
           text = prefix + excerpt
 
-          payload = {"channel": destination, "text": text}
-          req = urllib.request.Request(
-              "https://slack.com/api/chat.postMessage",
-              data=json.dumps(payload).encode("utf-8"),
-              headers={
-                  "Authorization": "Bearer " + token,
-                  "Content-Type": "application/json; charset=utf-8",
-              },
-              method="POST",
-          )
-          with urllib.request.urlopen(req, timeout=30) as resp:
-              data = json.loads(resp.read().decode("utf-8"))
-          if not data.get("ok"):
-              raise SystemExit(f"Slack notification failed: {data}")
+          slack_api(token, "chat.postMessage", {"channel": destination, "text": text})
           PY
 
       - name: Send failure notification to Slack
@@ -193,10 +225,45 @@ jobs:
           import os
           import urllib.request
 
+          def normalize_destination(value):
+              value = value.strip()
+              if value.startswith("<") and value.endswith(">"):
+                  value = value[1:-1].strip()
+              if "|" in value:
+                  value = value.split("|", 1)[0].strip()
+              return value.lstrip("@#").strip()
+
+          def slack_api(token, method, payload):
+              req = urllib.request.Request(
+                  f"https://slack.com/api/{method}",
+                  data=json.dumps(payload).encode("utf-8"),
+                  headers={
+                      "Authorization": "Bearer " + token,
+                      "Content-Type": "application/json; charset=utf-8",
+                  },
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  data = json.loads(resp.read().decode("utf-8"))
+              if not data.get("ok"):
+                  raise SystemExit(f"Slack notification failed ({method}): {data}")
+              return data
+
+          def resolve_channel(token, destination):
+              destination = normalize_destination(destination)
+              if destination[:1] in {"U", "W"}:
+                  data = slack_api(token, "conversations.open", {"users": destination})
+                  channel_id = (data.get("channel") or {}).get("id")
+                  if not channel_id:
+                      raise SystemExit(f"Slack DM open failed: {data}")
+                  return channel_id
+              return destination
+
           token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
           destination = os.environ.get("SLACK_DESTINATION", "").strip()
           if not token or not destination:
               raise SystemExit("Skipping Slack failure notification: missing token or destination.")
+          destination = resolve_channel(token, destination)
 
           text = (
               f"Comms Analyst report failed.\n"
@@ -205,20 +272,7 @@ jobs:
               f"Workflow run: {os.environ['RUN_URL']}\n"
               "Open the run logs, then update the issue and add the `run-report` label to retry."
           )
-          payload = {"channel": destination, "text": text}
-          req = urllib.request.Request(
-              "https://slack.com/api/chat.postMessage",
-              data=json.dumps(payload).encode("utf-8"),
-              headers={
-                  "Authorization": "Bearer " + token,
-                  "Content-Type": "application/json; charset=utf-8",
-              },
-              method="POST",
-          )
-          with urllib.request.urlopen(req, timeout=30) as resp:
-              data = json.loads(resp.read().decode("utf-8"))
-          if not data.get("ok"):
-              raise SystemExit(f"Slack notification failed: {data}")
+          slack_api(token, "chat.postMessage", {"channel": destination, "text": text})
           PY
 
       - name: Comment success on issue
