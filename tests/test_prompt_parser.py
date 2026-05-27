@@ -62,6 +62,10 @@ class ParsePromptTests(unittest.TestCase):
         cfg = parse_prompt("Track OpenAI Sora over the last 24 hours")
         self.assertEqual(cfg.time_window_hours, 24)
 
+    def test_target_name_preserves_brand_casing(self) -> None:
+        cfg = parse_prompt("Track sentiment around GitHub Copilot over the last 24 hours")
+        self.assertEqual(cfg.target_name, "GitHub Copilot")
+
     def test_default_time_window(self) -> None:
         cfg = parse_prompt("Track GitHub Copilot")
         self.assertEqual(cfg.time_window_hours, 72)
