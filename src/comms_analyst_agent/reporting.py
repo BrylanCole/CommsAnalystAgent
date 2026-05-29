@@ -55,6 +55,7 @@ def _display_channel(channel: str) -> str:
         "hackernews": "Hacker News",
         "linkedin": "LinkedIn",
         "x": "X",
+        "threads": "Threads",
     }.get(channel, channel.replace("_", " ").title())
 
 
@@ -243,7 +244,7 @@ def build_slack_summary(
         reverse=True,
     )
     article_items = [item for item in sorted_items if item.item.channel in {"news", "rss"}]
-    social_items = [item for item in sorted_items if item.item.channel in {"reddit", "linkedin", "x", "hackernews"}]
+    social_items = [item for item in sorted_items if item.item.channel in {"reddit", "linkedin", "x", "threads", "hackernews"}]
 
     headline = f"*{config.target_name} — Deep Sentiment Analysis*"
     timestamp = generated_at.strftime("%B %d, %Y %H:%M UTC")
