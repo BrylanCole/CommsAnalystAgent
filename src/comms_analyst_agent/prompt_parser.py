@@ -86,6 +86,7 @@ _SOURCE_MAP: dict[str, list[str]] = {
     "linkedin": ["linkedin"],
     "x": ["x"],
     "twitter": ["x"],
+    "threads": ["threads"],
     "hacker news": ["hackernews"],
     "hn": ["hackernews"],
     "news": ["news"],

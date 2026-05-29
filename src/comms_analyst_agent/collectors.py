@@ -247,6 +247,64 @@ def collect_x_posts(config: MonitoringConfig) -> list[ContentItem]:
     return _safe_collect(_collect)
 
 
+def collect_threads(config: MonitoringConfig) -> list[ContentItem]:
+    def _collect() -> list[ContentItem]:
+        access_token = os.getenv("COMMS_THREADS_ACCESS_TOKEN", "").strip()
+        if not access_token:
+            return []
+
+        api_base = os.getenv("COMMS_THREADS_API_BASE", "https://graph.threads.net").rstrip("/")
+        api_version = os.getenv("COMMS_THREADS_API_VERSION", "v1.0").strip("/") or "v1.0"
+        search_type = os.getenv("COMMS_THREADS_SEARCH_TYPE", "TOP").strip() or "TOP"
+        fields = "id,text,permalink,timestamp,username,media_type"
+        items: list[ContentItem] = []
+
+        for term in config.search_terms:
+            query = urllib.parse.quote_plus(term)
+            url = (
+                f"{api_base}/{api_version}/keyword_search"
+                f"?q={query}&search_type={search_type}"
+                f"&fields={fields}"
+                f"&access_token={urllib.parse.quote_plus(access_token)}"
+            )
+            try:
+                data = _http_get_json(url)
+            except urllib.error.HTTPError as exc:
+                if exc.code in {401, 403, 429}:
+                    break
+                raise
+
+            records = data.get("data") or []
+            term_count = 0
+            for record in records:
+                permalink = str(record.get("permalink") or "").strip()
+                if not permalink:
+                    continue
+                text = str(record.get("text") or "").strip()
+                username = str(record.get("username") or "").strip()
+                title = (text.splitlines()[0] if text else f"Threads mention: {term}")[:180]
+                items.append(
+                    ContentItem(
+                        title=title,
+                        url=permalink,
+                        source="Threads",
+                        author=(f"@{username}" if username else None),
+                        published_at=str(record.get("timestamp") or "").strip() or None,
+                        snippet=text[:600],
+                        content=text[:2000],
+                        channel="threads",
+                        engagement={},
+                    )
+                )
+                term_count += 1
+                if term_count >= config.max_items_per_source:
+                    break
+
+        return items
+
+    return _safe_collect(_collect)
+
+
 def collect_reddit(config: MonitoringConfig) -> list[ContentItem]:
     def _collect() -> list[ContentItem]:
         items: list[ContentItem] = []
@@ -379,4 +437,6 @@ def collect_all(config: MonitoringConfig) -> list[ContentItem]:
         collected.extend(collect_linkedin(config))
     if "x" in sources:
         collected.extend(collect_x_posts(config))
+    if "threads" in sources:
+        collected.extend(collect_threads(config))
     return deduplicate_items(collected)

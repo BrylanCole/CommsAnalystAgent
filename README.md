@@ -175,7 +175,7 @@ Create a JSON file (or copy `config/monitoring_target.sample.json`) with:
 - `time_window_hours`
 - `rss_feeds`
 - `max_items_per_source`
-- `sources` (optional list: `news`, `rss`, `reddit`, `hackernews`, `linkedin`, `x`)
+- `sources` (optional list: `news`, `rss`, `reddit`, `hackernews`, `linkedin`, `x`, `threads`)
 - `article_domains` (optional list of allowed article domains for News/RSS links)
 
 Run with a config file:
@@ -279,6 +279,7 @@ Current source adapters:
 - Hacker News (Algolia API)
 - LinkedIn API (`COMMS_LINKEDIN_ACCESS_TOKEN`)
 - X API v2 recent search (`COMMS_X_BEARER_TOKEN`)
+- Threads Graph API keyword search (`COMMS_THREADS_ACCESS_TOKEN`)
 
 LinkedIn collection is API-only (no scraping). Set:
 - `COMMS_LINKEDIN_ACCESS_TOKEN` (required for LinkedIn collection)
@@ -288,7 +289,13 @@ X collection is API-only (no scraping). Set:
 - `COMMS_X_BEARER_TOKEN` (required for X collection)
 - `COMMS_X_API_BASE` (optional, default: `https://api.x.com`)
 
-Some social networks (Threads, TikTok) usually require official APIs, credentials, and policy-compliant access for reliable coverage. The collector module is adapter-based so those sources can be added later.
+Threads collection is API-only (no scraping) and uses the Threads Graph API keyword search endpoint. Set:
+- `COMMS_THREADS_ACCESS_TOKEN` (required for Threads collection)
+- `COMMS_THREADS_API_BASE` (optional, default: `https://graph.threads.net`)
+- `COMMS_THREADS_API_VERSION` (optional, default: `v1.0`)
+- `COMMS_THREADS_SEARCH_TYPE` (optional, default: `TOP`; alternative: `RECENT`)
+
+Other social networks (e.g., TikTok) usually require official APIs, credentials, and policy-compliant access for reliable coverage. The collector module is adapter-based so additional sources can be added later.
 
 ## Validation
 
