@@ -32,6 +32,7 @@ class MonitoringConfig:
     max_items_per_source: int = 25
     sources: list[str] = field(default_factory=lambda: list(DEFAULT_SOURCES))
     article_domains: list[str] = field(default_factory=list)
+    exclude_domains: list[str] = field(default_factory=list)
 
     @property
     def search_terms(self) -> list[str]:
@@ -74,4 +75,5 @@ def load_config(config_path: str | Path) -> MonitoringConfig:
         max_items_per_source=int(raw.get("max_items_per_source", 25)),
         sources=raw.get("sources", list(DEFAULT_SOURCES)),
         article_domains=raw.get("article_domains", []),
+        exclude_domains=raw.get("exclude_domains", []),
     )

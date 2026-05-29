@@ -39,6 +39,14 @@ jobs:
 
       - name: Run via chat prompt (if prompt supplied)
         if: ${{ github.event.inputs.prompt != '' }}
+        env:
+          COMMS_X_BEARER_TOKEN: ${{ secrets.COMMS_X_BEARER_TOKEN }}
+          COMMS_X_API_BASE: ${{ secrets.COMMS_X_API_BASE }}
+          COMMS_LINKEDIN_ACCESS_TOKEN: ${{ secrets.COMMS_LINKEDIN_ACCESS_TOKEN }}
+          COMMS_LINKEDIN_API_BASE: ${{ secrets.COMMS_LINKEDIN_API_BASE }}
+          COMMS_THREADS_ACCESS_TOKEN: ${{ secrets.COMMS_THREADS_ACCESS_TOKEN }}
+          COMMS_THREADS_API_BASE: ${{ secrets.COMMS_THREADS_API_BASE }}
+          COMMS_THREADS_API_VERSION: ${{ secrets.COMMS_THREADS_API_VERSION }}
         run: |
           comms-analyst-chat \
             --prompt "${{ github.event.inputs.prompt }}" \
@@ -47,6 +55,14 @@ jobs:
 
       - name: Run via config file (if no prompt supplied)
         if: ${{ github.event.inputs.prompt == '' }}
+        env:
+          COMMS_X_BEARER_TOKEN: ${{ secrets.COMMS_X_BEARER_TOKEN }}
+          COMMS_X_API_BASE: ${{ secrets.COMMS_X_API_BASE }}
+          COMMS_LINKEDIN_ACCESS_TOKEN: ${{ secrets.COMMS_LINKEDIN_ACCESS_TOKEN }}
+          COMMS_LINKEDIN_API_BASE: ${{ secrets.COMMS_LINKEDIN_API_BASE }}
+          COMMS_THREADS_ACCESS_TOKEN: ${{ secrets.COMMS_THREADS_ACCESS_TOKEN }}
+          COMMS_THREADS_API_BASE: ${{ secrets.COMMS_THREADS_API_BASE }}
+          COMMS_THREADS_API_VERSION: ${{ secrets.COMMS_THREADS_API_VERSION }}
         run: |
           comms-analyst-agent \
             --config "${{ github.event.inputs.config_path || 'config/monitoring_target.sample.json' }}" \

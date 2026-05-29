@@ -1,8 +1,10 @@
+import os
 import urllib.error
 import unittest
 from unittest import mock
 
 from comms_analyst_agent.collectors import (
+    CollectionDiagnostics,
     collect_all,
     collect_linkedin,
     collect_rss_feeds,
@@ -185,14 +187,82 @@ class ArticleDomainFilterTests(unittest.TestCase):
         cfg = _config(article_domains=["allowed.com"])
         xml_payload = """
         <rss><channel>
-          <item><title>Allowed</title><link>https://allowed.com/post</link><description>a</description></item>
-          <item><title>Blocked</title><link>https://blocked.com/post</link><description>b</description></item>
+          <item><title>Launch arrives on allowed</title><link>https://allowed.com/post</link><description>Launch covered here</description></item>
+          <item><title>Launch arrives on blocked</title><link>https://blocked.com/post</link><description>Launch covered here</description></item>
         </channel></rss>
         """
         with mock.patch("comms_analyst_agent.collectors._http_get_text", return_value=xml_payload):
             items = collect_rss_feeds(cfg)
         self.assertEqual(len(items), 1)
         self.assertIn("allowed.com", items[0].url)
+
+
+class RssTopicFilterTests(unittest.TestCase):
+    def test_rss_drops_items_unrelated_to_search_terms(self) -> None:
+        cfg = _config(github_terms=["Copilot Pricing"])
+        xml_payload = """
+        <rss><channel>
+          <item><title>Copilot Pricing changes announced</title><link>https://example.com/a</link><description>details</description></item>
+          <item><title>Unrelated open source roundup</title><link>https://example.com/b</link><description>weekend reading</description></item>
+        </channel></rss>
+        """
+        with mock.patch("comms_analyst_agent.collectors._http_get_text", return_value=xml_payload):
+            items = collect_rss_feeds(cfg)
+        self.assertEqual(len(items), 1)
+        self.assertIn("/a", items[0].url)
+
+    def test_rss_excludes_blocked_domains(self) -> None:
+        cfg = _config(github_terms=["Launch"], exclude_domains=["github.blog"])
+        xml_payload = """
+        <rss><channel>
+          <item><title>Launch update on github blog</title><link>https://github.blog/launch</link><description>announcement</description></item>
+          <item><title>Launch update on neutral site</title><link>https://example.com/launch</link><description>announcement</description></item>
+        </channel></rss>
+        """
+        with mock.patch("comms_analyst_agent.collectors._http_get_text", return_value=xml_payload):
+            items = collect_rss_feeds(cfg)
+        self.assertEqual(len(items), 1)
+        self.assertIn("example.com", items[0].url)
+
+
+class CollectionDiagnosticsTests(unittest.TestCase):
+    def test_records_skipped_when_token_missing(self) -> None:
+        cfg = _config(sources=["x", "linkedin", "threads"])
+        diagnostics = CollectionDiagnostics()
+        with mock.patch.dict("os.environ", {}, clear=True):
+            items = collect_all(cfg, diagnostics=diagnostics)
+        self.assertEqual(items, [])
+        self.assertEqual(diagnostics.sources["x"].status, "skipped")
+        self.assertIn("COMMS_X_BEARER_TOKEN", diagnostics.sources["x"].reason)
+        self.assertEqual(diagnostics.sources["linkedin"].status, "skipped")
+        self.assertEqual(diagnostics.sources["threads"].status, "skipped")
+
+    def test_records_ok_status_for_successful_collector(self) -> None:
+        cfg = _config(github_terms=["Launch"])
+        xml_payload = """
+        <rss><channel>
+          <item><title>Launch update</title><link>https://example.com/a</link><description>Launch covered</description></item>
+        </channel></rss>
+        """
+        diagnostics = CollectionDiagnostics()
+        with mock.patch("comms_analyst_agent.collectors._http_get_text", return_value=xml_payload):
+            collect_rss_feeds(cfg, diagnostics=diagnostics)
+        self.assertEqual(diagnostics.sources["rss"].status, "ok")
+        self.assertEqual(diagnostics.sources["rss"].count, 1)
+
+    def test_records_error_status_when_http_fails(self) -> None:
+        cfg = _config(github_terms=["Launch"])
+        diagnostics = CollectionDiagnostics()
+        http_error = urllib.error.HTTPError(
+            "https://example.com/feed", 503, "Service Unavailable", None, None
+        )
+        with mock.patch(
+            "comms_analyst_agent.collectors._http_get_text", side_effect=http_error
+        ):
+            items = collect_rss_feeds(cfg, diagnostics=diagnostics)
+        self.assertEqual(items, [])
+        self.assertEqual(diagnostics.sources["rss"].status, "error")
+        self.assertIn("503", diagnostics.sources["rss"].reason)
 
 
 if __name__ == "__main__":

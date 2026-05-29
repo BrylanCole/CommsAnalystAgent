@@ -7,7 +7,55 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .analysis import AggregateAnalysis
+from .collectors import CollectionDiagnostics
 from .config import MonitoringConfig
+
+
+_ARTICLE_SOURCES: tuple[str, ...] = ("news", "rss")
+_SOCIAL_SOURCES: tuple[str, ...] = ("reddit", "linkedin", "x", "threads", "hackernews")
+
+
+def _format_status_breakdown(
+    diagnostics: CollectionDiagnostics | None, channels: tuple[str, ...]
+) -> str:
+    """Return e.g. ``Google News 5, RSS 7`` or ``X: token missing, Reddit: HTTP 429``.
+
+    Falls back to an empty string when no diagnostics are available.
+    """
+    if diagnostics is None:
+        return ""
+    parts: list[str] = []
+    for channel in channels:
+        status = diagnostics.sources.get(channel)
+        if status is None:
+            continue
+        label = _display_channel(channel)
+        if status.status == "ok":
+            parts.append(f"{label} {status.count}")
+        elif status.status == "skipped":
+            parts.append(f"{label}: {status.reason or 'skipped'}")
+        elif status.status == "error":
+            parts.append(f"{label}: {status.reason or 'error'}")
+        elif status.status == "empty" and status.count == 0:
+            parts.append(f"{label} 0")
+    return ", ".join(parts)
+
+
+def _diagnostics_lines(diagnostics: CollectionDiagnostics | None) -> list[str]:
+    if diagnostics is None or not diagnostics.sources:
+        return []
+    rows: list[str] = []
+    for status in diagnostics.sources.values():
+        label = _display_channel(status.name)
+        if status.status == "ok":
+            rows.append(f"{label}: {status.count} item(s)")
+        elif status.status == "empty":
+            rows.append(f"{label}: 0 items ({status.reason or 'no matches'})")
+        elif status.status == "skipped":
+            rows.append(f"{label}: skipped — {status.reason or 'unavailable'}")
+        elif status.status == "error":
+            rows.append(f"{label}: error — {status.reason or 'unknown error'}")
+    return rows
 
 
 def _percent(part: int, total: int) -> float:
@@ -234,6 +282,7 @@ def build_slack_summary(
     config: MonitoringConfig,
     analysis: AggregateAnalysis,
     generated_at: dt.datetime | None = None,
+    diagnostics: CollectionDiagnostics | None = None,
 ) -> str:
     generated_at = generated_at or dt.datetime.now(dt.timezone.utc)
     total = len(analysis.analyzed_items)
@@ -248,11 +297,19 @@ def build_slack_summary(
 
     headline = f"*{config.target_name} — Deep Sentiment Analysis*"
     timestamp = generated_at.strftime("%B %d, %Y %H:%M UTC")
+    article_breakdown = _format_status_breakdown(diagnostics, _ARTICLE_SOURCES)
+    social_breakdown = _format_status_breakdown(diagnostics, _SOCIAL_SOURCES)
+    article_line = f"• Total # of articles: {len(article_items)}"
+    if article_breakdown:
+        article_line += f" ({article_breakdown})"
+    social_line = f"• Total # of posts: {len(social_items)}"
+    if social_breakdown:
+        social_line += f" ({social_breakdown})"
     totals = "\n".join(
         [
             "*Coverage Totals*",
-            f"• Total # of articles: {len(article_items)}",
-            f"• Total # of posts: {len(social_items)}",
+            article_line,
+            social_line,
             f"• Total analyzed items: {total}",
             f"• Majority sentiment: {_majority_sentiment(dict(counts))}",
             f"• Overall trend: {_trend_emoji(analysis.trend_label)} {analysis.trend_label} ({analysis.trend_confidence:.2f})",
@@ -329,10 +386,19 @@ def build_slack_summary(
         competitor_mentions,
         social_links,
     ]
+    diagnostic_lines = _diagnostics_lines(diagnostics)
+    if diagnostic_lines:
+        sections.append(
+            "\n".join(["*Source Coverage Diagnostics*", *(f"• {line}" for line in diagnostic_lines)])
+        )
     return "\n\n".join(section for section in sections if section).strip()
 
 
-def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis) -> str:
+def build_markdown_report(
+    config: MonitoringConfig,
+    analysis: AggregateAnalysis,
+    diagnostics: CollectionDiagnostics | None = None,
+) -> str:
     total = len(analysis.analyzed_items)
     counts = defaultdict(int, analysis.sentiment_counts)
     negative_total = counts["Negative"] + counts["Concerned"] + counts["Skeptical"]
@@ -350,6 +416,14 @@ def build_markdown_report(config: MonitoringConfig, analysis: AggregateAnalysis)
     opportunity_lines = [
         _clean_signal_label(item) for item in (analysis.opportunity_narratives[:3] or analysis.praise_patterns[:3])
     ]
+    diagnostic_lines = _diagnostics_lines(diagnostics)
+    diagnostics_section = ""
+    if diagnostic_lines:
+        diagnostics_section = (
+            "\n## Source Coverage\n"
+            + _markdown_bullets(diagnostic_lines, fallback="No source diagnostics captured.")
+            + "\n"
+        )
 
     return f"""# {config.target_name} — Deep Sentiment Analysis
 
@@ -417,11 +491,15 @@ Negative pressure accounts for **{_percent(negative_total, total)}%** of the sam
 
 ## Sources Analyzed
 {_markdown_bullets(source_lines)}
-"""
+{diagnostics_section}"""
 
 
-def build_json_output(config: MonitoringConfig, analysis: AggregateAnalysis) -> dict:
-    return {
+def build_json_output(
+    config: MonitoringConfig,
+    analysis: AggregateAnalysis,
+    diagnostics: CollectionDiagnostics | None = None,
+) -> dict:
+    payload: dict = {
         "target": asdict(config),
         "sentiment_snapshot": {
             "counts": analysis.sentiment_counts,
@@ -445,6 +523,12 @@ def build_json_output(config: MonitoringConfig, analysis: AggregateAnalysis) -> 
         },
         "items": [result.to_dict() for result in analysis.analyzed_items],
     }
+    if diagnostics is not None:
+        payload["source_diagnostics"] = {
+            name: {"count": status.count, "status": status.status, "reason": status.reason}
+            for name, status in diagnostics.sources.items()
+        }
+    return payload
 
 
 def write_outputs(output_dir: Path, markdown: str, json_payload: dict, slack_summary: str) -> None:

@@ -1,6 +1,7 @@
 import unittest
 
 from comms_analyst_agent.analysis import analyze_items
+from comms_analyst_agent.collectors import CollectionDiagnostics
 from comms_analyst_agent.config import MonitoringConfig
 from comms_analyst_agent.models import ContentItem
 from comms_analyst_agent.reporting import build_markdown_report, build_slack_summary
@@ -160,6 +161,29 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("Older but high-engagement item", headline_lines[0])
         self.assertIn("Recent lower-authority item", headline_lines[1])
         self.assertIn("High authority older item", headline_lines[2])
+
+    def test_slack_summary_includes_source_diagnostics(self) -> None:
+        config = MonitoringConfig(
+            target_name="Target",
+            launch_name="Launch",
+            github_terms=["GitHub"],
+            executive_names=[],
+            hashtags=[],
+            competitors=[],
+            time_window_hours=24,
+            rss_feeds=[],
+            max_items_per_source=5,
+        )
+        analysis = analyze_items([], config)
+        diagnostics = CollectionDiagnostics()
+        diagnostics.record("x", 0, "skipped", "COMMS_X_BEARER_TOKEN not set")
+        diagnostics.record("rss", 3, "ok", "")
+        summary = build_slack_summary(config, analysis, diagnostics=diagnostics)
+        # Per-source breakdown appears in the totals lines.
+        self.assertIn("RSS 3", summary)
+        self.assertIn("X: COMMS_X_BEARER_TOKEN not set", summary)
+        # Detailed diagnostics section is appended.
+        self.assertIn("*Source Coverage Diagnostics*", summary)
 
 
 if __name__ == "__main__":

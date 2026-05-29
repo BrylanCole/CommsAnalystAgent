@@ -15,8 +15,14 @@ from .config import DEFAULT_SOURCES, MonitoringConfig
 # Default feeds used when the user does not mention a specific source
 # ---------------------------------------------------------------------------
 DEFAULT_RSS_FEEDS: list[str] = [
-    "https://hnrss.org/frontpage",
-    "https://github.blog/feed/",
+    # Independent tech-journalism feeds. Intentionally excludes vendor blogs
+    # (e.g. github.blog) so prompts about a vendor's product do not pull the
+    # vendor's own latest posts as "coverage".
+    "https://techcrunch.com/feed/",
+    "https://www.theverge.com/rss/index.xml",
+    "https://feeds.arstechnica.com/arstechnica/index",
+    "https://www.zdnet.com/news/rss.xml",
+    "https://www.infoworld.com/index.rss",
 ]
 
 # ---------------------------------------------------------------------------
@@ -76,6 +82,68 @@ _HASHTAG_RE = re.compile(r"#\w+")
 
 def _extract_hashtags(text: str) -> list[str]:
     return _HASHTAG_RE.findall(text)
+
+
+# ---------------------------------------------------------------------------
+# Excluded-domain extraction
+# ---------------------------------------------------------------------------
+# Recognize phrases such as:
+#   "Do not reference github.com"
+#   "exclude github.blog and microsoft.com"
+#   "ignore reddit.com"
+#   "no results from techcrunch.com"
+#   "without github-self-published blogs"   → maps to github.com / github.blog
+_EXCLUDE_PHRASE_RE = re.compile(
+    r"(?:do\s+not\s+(?:reference|include|use)|don'?t\s+(?:reference|include|use)|exclude|ignore|skip|avoid|without|no\s+results?\s+from|filter\s+out)\s+([^\n]+)",
+    re.IGNORECASE,
+)
+_DOMAIN_RE = re.compile(r"\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})\b", re.IGNORECASE)
+_VENDOR_BLOG_HINTS: dict[str, list[str]] = {
+    "github": ["github.com", "github.blog"],
+    "microsoft": ["microsoft.com", "blogs.microsoft.com"],
+    "google": ["google.com", "blog.google"],
+    "openai": ["openai.com"],
+    "meta": ["meta.com", "about.fb.com"],
+    "apple": ["apple.com"],
+    "amazon": ["amazon.com", "aws.amazon.com"],
+    "linkedin": ["linkedin.com"],
+}
+
+
+def _extract_exclude_domains(text: str) -> list[str]:
+    """Return domain names the user asked us to exclude.
+
+    Pulls explicit domains (``github.blog``) and well-known vendor names
+    (``GitHub self-published blogs`` → ``github.com``/``github.blog``) out of
+    the prompt body. Empty list when nothing to exclude.
+    """
+    excluded: list[str] = []
+    seen: set[str] = set()
+
+    def _add(domain: str) -> None:
+        normalized = domain.strip().lower().lstrip(".")
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        excluded.append(normalized)
+
+    for match in _EXCLUDE_PHRASE_RE.finditer(text):
+        clause = match.group(1)
+        for domain_match in _DOMAIN_RE.finditer(clause):
+            _add(domain_match.group(1))
+        clause_lower = clause.lower()
+        for vendor, domains in _VENDOR_BLOG_HINTS.items():
+            if vendor in clause_lower and (
+                "blog" in clause_lower
+                or "self-published" in clause_lower
+                or "self published" in clause_lower
+                or "owned" in clause_lower
+                or "site" in clause_lower
+                or "domain" in clause_lower
+            ):
+                for domain in domains:
+                    _add(domain)
+    return excluded
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +296,7 @@ def parse_prompt(prompt: str) -> MonitoringConfig:
     competitors = _extract_competitors(prompt)
     executives = _extract_executives(prompt)
     source_focus = _extract_source_focus(prompt)
+    exclude_domains = _extract_exclude_domains(prompt)
 
     # Max items: look for explicit "top N" style hint
     items_match = re.search(r"\b(top|max|limit)\s+(\d+)\b", prompt, re.IGNORECASE)
@@ -244,6 +313,7 @@ def parse_prompt(prompt: str) -> MonitoringConfig:
         rss_feeds=DEFAULT_RSS_FEEDS,
         max_items_per_source=max_items,
         sources=source_focus or list(DEFAULT_SOURCES),
+        exclude_domains=exclude_domains,
     )
 
 
@@ -258,5 +328,6 @@ def describe_config(config: MonitoringConfig) -> str:
         f"  Max items/src  : {config.max_items_per_source}",
         f"  Sources        : {', '.join(sorted(config.enabled_sources))}",
         f"  RSS feeds      : {len(config.rss_feeds)} feed(s)",
+        f"  Excluded sites : {', '.join(config.exclude_domains) or '(none)'}",
     ]
     return "\n".join(lines)

@@ -77,6 +77,11 @@ jobs:
                   r"### Prompt\s*\n([\s\S]*?)(?:\n### |\Z)",
               ]
           )
+          additional_context = extract_section(
+              [
+                  r"### Additional context\s*\n([\s\S]*?)(?:\n### |\Z)",
+              ]
+          )
           slack_destination = extract_section(
               [
                   r"### Slack recipient \(User ID or Channel ID\)\s*\n([\s\S]*?)(?:\n### |\Z)",
@@ -89,6 +94,12 @@ jobs:
               raise SystemExit("Could not extract prompt from issue body.")
           if not slack_destination:
               raise SystemExit("Could not extract Slack recipient from issue body.")
+
+          # Append the issue's "Additional context" to the prompt so phrases
+          # such as "Do not reference GitHub self-published blogs" reach the
+          # parser's exclude-domain extractor.
+          if additional_context:
+              prompt = prompt.rstrip() + "\n\n" + additional_context.strip()
 
           output_dir = f"outputs/issues/{issue_number}/{os.environ['RUN_ID']}"
           requester = (issue.get("user") or {}).get("login") or "unknown"
@@ -111,6 +122,17 @@ jobs:
         env:
           PROMPT: ${{ steps.extract.outputs.prompt }}
           OUTPUT_DIR: ${{ steps.extract.outputs.output_dir }}
+          # Forward optional social-platform credentials so the X / LinkedIn /
+          # Threads collectors can authenticate. Missing secrets are fine:
+          # collectors record a "skipped — token not set" diagnostic instead
+          # of silently returning 0 posts.
+          COMMS_X_BEARER_TOKEN: ${{ secrets.COMMS_X_BEARER_TOKEN }}
+          COMMS_X_API_BASE: ${{ secrets.COMMS_X_API_BASE }}
+          COMMS_LINKEDIN_ACCESS_TOKEN: ${{ secrets.COMMS_LINKEDIN_ACCESS_TOKEN }}
+          COMMS_LINKEDIN_API_BASE: ${{ secrets.COMMS_LINKEDIN_API_BASE }}
+          COMMS_THREADS_ACCESS_TOKEN: ${{ secrets.COMMS_THREADS_ACCESS_TOKEN }}
+          COMMS_THREADS_API_BASE: ${{ secrets.COMMS_THREADS_API_BASE }}
+          COMMS_THREADS_API_VERSION: ${{ secrets.COMMS_THREADS_API_VERSION }}
         run: |
           comms-analyst-chat --prompt "$PROMPT" --output-dir "$OUTPUT_DIR" --yes
 

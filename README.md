@@ -244,6 +244,38 @@ Recommended Slack app scopes:
 - `chat:write.public` (if posting to public channels)
 - `im:write` (if sending direct messages to user IDs)
 
+### Social-platform credentials (optional but recommended)
+
+Without these secrets the X / LinkedIn / Threads collectors are skipped and the
+report's *Source Coverage Diagnostics* section explains why ("token not set").
+The workflow forwards them automatically when present.
+
+| Secret | Required for | Notes |
+|---|---|---|
+| `COMMS_X_BEARER_TOKEN` | X (Twitter) recent search | ****** from an X developer app with read access to the v2 recent-search endpoint. |
+| `COMMS_X_API_BASE` | X (optional override) | Defaults to `https://api.x.com`. |
+| `COMMS_LINKEDIN_ACCESS_TOKEN` | LinkedIn `/v2/posts` keyword search | Requires LinkedIn Marketing Developer Platform partnership; standard developer apps cannot keyword-search public posts. |
+| `COMMS_LINKEDIN_API_BASE` | LinkedIn (optional override) | Defaults to `https://api.linkedin.com`. |
+| `COMMS_THREADS_ACCESS_TOKEN` | Threads keyword search (Graph API) | App-scoped access token. |
+| `COMMS_THREADS_API_BASE` / `COMMS_THREADS_API_VERSION` | Threads (optional overrides) | Default to `https://graph.threads.net` / `v1.0`. |
+
+Add any of these in **Settings → Secrets and variables → Actions**. They are
+forwarded by both `run-comms-analyst-from-issue.yml` and
+`run-comms-analyst-agent.yml`.
+
+### Excluding sources from a report
+
+If a report should not include a vendor's own publications (e.g. a "Copilot
+sentiment" report that shouldn't include `github.blog`), use the issue form's
+*Additional context* field (or any plain prompt) with phrasing such as:
+
+- `Do not reference github.blog`
+- `Exclude techcrunch.com and theverge.com`
+- `Do not reference GitHub self-published blogs`
+
+The prompt parser converts these into `exclude_domains` and applies the filter
+to every collector. The default RSS feed list also excludes vendor blogs.
+
 ## Shareable team URL (hosted deployment)
 
 This repo includes deployment files for a permanent team link:

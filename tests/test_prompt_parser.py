@@ -2,6 +2,7 @@ import unittest
 
 from comms_analyst_agent.prompt_parser import (
     DEFAULT_RSS_FEEDS,
+    _extract_exclude_domains,
     _extract_time_window,
     _extract_competitors,
     _extract_hashtags,
@@ -128,6 +129,40 @@ class ParsePromptTests(unittest.TestCase):
         from comms_analyst_agent.config import MonitoringConfig
         cfg = parse_prompt("Track Sora AI over the last 48 hours")
         self.assertIsInstance(cfg, MonitoringConfig)
+
+
+class ExcludeDomainsTests(unittest.TestCase):
+    def test_extracts_explicit_domain(self) -> None:
+        result = _extract_exclude_domains("Track GitHub Copilot. Do not reference github.blog")
+        self.assertIn("github.blog", result)
+
+    def test_extracts_multiple_domains(self) -> None:
+        result = _extract_exclude_domains("exclude techcrunch.com and theverge.com")
+        self.assertIn("techcrunch.com", result)
+        self.assertIn("theverge.com", result)
+
+    def test_vendor_self_published_blogs_phrase(self) -> None:
+        result = _extract_exclude_domains(
+            "Do not reference GitHub self-published blogs"
+        )
+        self.assertIn("github.blog", result)
+        self.assertIn("github.com", result)
+
+    def test_no_exclusions_returns_empty(self) -> None:
+        self.assertEqual(_extract_exclude_domains("monitor sentiment around copilot"), [])
+
+    def test_parse_prompt_wires_exclude_domains(self) -> None:
+        cfg = parse_prompt(
+            'Track sentiment around "Copilot Pricing". Do not reference github.blog'
+        )
+        self.assertIn("github.blog", cfg.exclude_domains)
+
+
+class DefaultRssFeedsTests(unittest.TestCase):
+    def test_default_feeds_excludes_github_owned(self) -> None:
+        joined = " ".join(DEFAULT_RSS_FEEDS).lower()
+        self.assertNotIn("github.blog", joined)
+        self.assertNotIn("github.com", joined)
 
 
 class DescribeConfigTests(unittest.TestCase):
